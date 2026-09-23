@@ -1,0 +1,5 @@
+import type {Authority,HAState,Member,MembershipSnapshot,ServiceAdapter} from "./types";
+export class FakeService implements ServiceAdapter{readonly calls:string[]=[];authority:Authority|null=null;onAuthority(a:Authority|null){this.authority=a;this.calls.push(a?"authority":"fenced")}onMembership(s:MembershipSnapshot){this.calls.push("membership:"+s.members.length)}onHealth(s:HAState){this.calls.push("health:"+s.status)}onFence(){this.calls.push("fence")}onDrain(){this.calls.push("drain")}onRecover(){this.calls.push("recover")}}
+export interface DatabaseHAContract{onHAAuthority(authority:Authority|null):Promise<void>;onReplicationPosition?(position:unknown):Promise<void>;onFence?(token:string):Promise<void>}
+export interface IdentityHAContract{registerNode(node:Member):Promise<void>;fenceMutations(term:bigint):Promise<void>;allowActiveActiveRequests():boolean}
+export interface VoiceHAContract{onNodeHealth(nodeId:string,healthy:boolean):Promise<void>;onControlAuthority(authority:Authority|null):Promise<void>;onDrain(nodeId:string):Promise<void>}

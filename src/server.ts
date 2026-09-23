@@ -1,0 +1,1 @@
+import {createNode} from "./node";const node=createNode();await node.start();await node.apiServer(Number(Bun.env.HA_API_PORT||7400));const shutdown=async()=>{await node.stop();process.exit(0)};process.once("SIGTERM",shutdown);process.once("SIGINT",shutdown);
