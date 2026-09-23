@@ -23,10 +23,7 @@ export class Membership {
   }
 
   snapshot(): MembershipSnapshot {
-    return {
-      version: this.v,
-      members: [...this.members.values()].map(x => ({ ...x })),
-    };
+    return { version: this.v, members: [...this.members.values()].map(x => ({ ...x })) };
   }
 
   onChange(fn: (s: MembershipSnapshot) => void) {
@@ -52,32 +49,31 @@ export class Membership {
     }
     if (existing.incarnation > incoming.incarnation) return existing;
     if (incoming.incarnation > existing.incarnation) return { ...incoming };
+    if (existing.address !== incoming.address) throw new AdmissionError("identity/address collision");
 
-    if (existing.address !== incoming.address) {
-      throw new AdmissionError("identity/address collision");
-    }
+    // A join/sync advertisement must never downgrade an already active member.
+    const existingRank = statusRank[existing.status];
+    const incomingRank = statusRank[incoming.status];
+    if (incomingRank < existingRank) return existing;
 
     if (incoming.lastSeen > existing.lastSeen) return { ...incoming };
     if (incoming.lastSeen < existing.lastSeen) return existing;
-
-    return statusRank[incoming.status] > statusRank[existing.status]
-      ? { ...incoming }
-      : existing;
+    return incomingRank > existingRank ? { ...incoming } : existing;
   }
 
   admit(node: Member) {
     if (node.cluster !== this.local.cluster || node.service !== this.local.service) {
       throw new AdmissionError("cluster/service mismatch");
     }
-
     const old = this.members.get(node.id);
     if (old && old.incarnation > node.incarnation) throw new AdmissionError("older incarnation");
     if (old && old.address !== node.address) throw new AdmissionError("identity/address collision");
 
     const merged = this.mergeMember(old, node);
     if (!merged) return;
+    const same = old && JSON.stringify(old) === JSON.stringify(merged);
     this.members.set(node.id, merged);
-    this.changed("node_joined", node.id);
+    if (!same) this.changed("node_joined", node.id);
   }
 
   touch(nodeId: string) {
@@ -117,13 +113,8 @@ export class Membership {
     }
   }
 
-  get(nodeId: string) {
-    return this.members.get(nodeId);
-  }
-
-  values() {
-    return [...this.members.values()];
-  }
+  get(nodeId: string) { return this.members.get(nodeId); }
+  values() { return [...this.members.values()]; }
 
   votingMembers() {
     return this.values().filter(member =>
@@ -131,13 +122,8 @@ export class Membership {
     );
   }
 
-  size() {
-    return this.members.size;
-  }
-
-  votingSize() {
-    return this.votingMembers().length;
-  }
+  size() { return this.members.size; }
+  votingSize() { return this.votingMembers().length; }
 
   healthy() {
     return this.votingMembers().filter(member =>
@@ -164,7 +150,6 @@ export class Membership {
       if (incoming.cluster !== this.local.cluster || incoming.service !== this.local.service) {
         throw new AdmissionError("cluster/service mismatch");
       }
-
       const current = this.members.get(incoming.id);
       const merged = this.mergeMember(current, incoming);
       if (merged && JSON.stringify(merged) !== JSON.stringify(current)) {
@@ -175,12 +160,8 @@ export class Membership {
 
     this.v = snapshot.version > this.v ? snapshot.version : this.v;
 
-    if (!this.members.has(this.local.id)) {
-      this.members.set(this.local.id, this.local);
-      changed = true;
-    } else {
-      this.members.set(this.local.id, this.local);
-    }
+    // Local state is authoritative for this process until its next explicit state change.
+    this.members.set(this.local.id, this.local);
 
     if (changed) {
       this.emit({
