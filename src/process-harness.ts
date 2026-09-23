@@ -2,7 +2,7 @@ import {mkdir,rm} from "node:fs/promises";
 import {resourceSnapshot,type ResourceSnapshot} from "./resources";
 import type {ChaosPolicy} from "./types";
 
-export interface ProcessNode{index:number;address:string;api:number;dataDir:string;process?:Bun.Subprocess;stderr?:string;stdout?:string}
+export interface ProcessNode{index:number;address:string;api:number;dataDir:string;process?:Bun.Subprocess;stderr?:string;stdout?:string;stderrDone?:Promise<void>;stdoutDone?:Promise<void>}
 
 export class LocalProcessCluster{
   readonly nodes:ProcessNode[]=[];
@@ -13,23 +13,23 @@ export class LocalProcessCluster{
   async start(){await rm(this.root,{recursive:true,force:true});await mkdir(this.root,{recursive:true});if(this.nodes.length){await this.startNode(this.nodes[0]);await Promise.all(this.nodes.slice(1).map(n=>this.startNode(n)))}return this}
   async startNode(n:ProcessNode){
     await mkdir(n.dataDir,{recursive:true});
-    n.stderr="";n.stdout="";n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.seeds(),HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000"},stdout:"ignore",stderr:"pipe"});
-    this.capture(n.process.stdout,s=>n.stdout=s);this.capture(n.process.stderr,s=>n.stderr=s);
+    n.stderr="";n.stdout="";n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.seeds(),HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000"},stdout:"pipe",stderr:"pipe"});
+    n.stdoutDone=this.capture(n.process.stdout,s=>n.stdout=s);n.stderrDone=this.capture(n.process.stderr,s=>n.stderr=s);
     await this.waitReady(n,5000);
     return n
   }
-  private capture(stream:ReadableStream<Uint8Array>|null|undefined,target:(value:string)=>void){if(!stream)return;void (async()=>{const reader=stream.getReader();const decoder=new TextDecoder();let value="";const limit=16384;try{while(true){const part=await reader.read();if(part.done)break;if(value.length<limit)value+=decoder.decode(part.value,{stream:true}).slice(0,limit-value.length)}}catch{}target(value.slice(-limit))})()}
+  private capture(stream:ReadableStream<Uint8Array>|null|undefined,target:(value:string)=>void){if(!stream)return Promise.resolve();return (async()=>{const reader=stream.getReader();const decoder=new TextDecoder();let value="";const limit=16384;try{while(true){const part=await reader.read();if(part.done)break;if(value.length<limit)value+=decoder.decode(part.value,{stream:true}).slice(0,limit-value.length)}}catch{}target(value.slice(-limit))})()}
   private async waitReady(n:ProcessNode,timeoutMs:number){
     const deadline=Date.now()+timeoutMs;
     while(Date.now()<deadline){
-      if(!n.process||n.process.exitCode!==null){let detail="";if(n.process?.stderr){try{detail=await new Response(n.process.stderr).text()}catch{}}throw new Error(`HA process ${n.index} exited during startup${detail?`:\n${detail.trim()}`:""}`)}
+      if(!n.process||n.process.exitCode!==null){await Promise.allSettled([n.stdoutDone,n.stderrDone]);const diagnostic=[n.stderr,n.stdout].filter(Boolean).join("\n").trim();throw new Error(`HA process ${n.index} exited during startup${diagnostic?`:\n${diagnostic}`:""}`)}
       try{
         const r=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(250)});
         if(r.ok)return;
       }catch{}
       await Bun.sleep(50)
     }
-    const diagnostic=[n.stderr,n.stdout].filter(Boolean).join("\\n").trim();throw new Error("HA process "+n.index+" did not become ready within "+timeoutMs+"ms"+(diagnostic?": "+diagnostic:""))
+    const diagnostic=[n.stderr,n.stdout].filter(Boolean).join("\n").trim();throw new Error("HA process "+n.index+" did not become ready within "+timeoutMs+"ms"+(diagnostic?": "+diagnostic:""))
   }
   async stop(index?:number){
     const targets=index===undefined?this.nodes:this.nodes.filter(n=>n.index===index);
