@@ -101,6 +101,10 @@ try{
     const leaders=reachable.filter(c=>c.state.role==="leader").map(c=>c.state.leaderId||String(c.i));
     chaos.recordInvariant("no-split-brain",new Set(leaders).size<=1,leaders.join(","));
 
+    const membershipSets=reachable.map(c=>JSON.stringify((c.state.membershipIds||[]).slice().sort()));
+    const membershipConverged=reachable.length>0&&reachable.every(c=>c.state.membershipReady)&&new Set(membershipSets).size===1;
+    chaos.recordInvariant("membership-converged",membershipConverged,membershipSets.join("|"));
+
     const terms=reachable.map(c=>BigInt(c.state.term));
     const minTerm=terms.length?terms.reduce((a,b)=>a<b?a:b):0n;
     const maxTerm=terms.length?terms.reduce((a,b)=>a>b?a:b):0n;
