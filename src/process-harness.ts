@@ -13,7 +13,7 @@ export class LocalProcessCluster{
   async start(){await mkdir(this.root,{recursive:true});for(const n of this.nodes)await this.startNode(n);return this}
   async startNode(n:ProcessNode){
     await mkdir(n.dataDir,{recursive:true});
-    n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.seeds(),HA_HEARTBEAT_MS:"200",HA_ELECTION_MIN_MS:"600",HA_ELECTION_MAX_MS:"1000"},stdout:"ignore",stderr:"ignore"});
+    n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.seeds(),HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000"},stdout:"ignore",stderr:"ignore"});
     await this.waitReady(n,5000);
     return n
   }
