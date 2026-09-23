@@ -9,7 +9,7 @@ export class LocalProcessCluster{
   constructor(private count=3,private basePort=7301,private apiBase=7401,private root="./.ha-process",private secret="local-test-secret"){
     for(let i=0;i<count;i++)this.nodes.push({index:i,address:`http://127.0.0.1:${basePort+i}`,api:apiBase+i,dataDir:`${root}/${i}`})
   }
-  private seeds(){return this.nodes[0]?.address||""}
+  private seeds(){return this.nodes[0]?.address.replace(/^https?:\\/\\//,"")||""}
   private peers(){return this.nodes.map(n=>n.address).join(",")}
   async start(){await rm(this.root,{recursive:true,force:true});await mkdir(this.root,{recursive:true});if(this.nodes.length){await this.startNode(this.nodes[0]);await Promise.all(this.nodes.slice(1).map(n=>this.startNode(n)))}return this}
   async startNode(n:ProcessNode){
