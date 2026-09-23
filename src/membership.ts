@@ -1,4 +1,196 @@
 import type { Clock, HAEvent, Member, MembershipSnapshot, NodeStatus } from "./types";
 import { AdmissionError, HAError } from "./errors";
 import { id } from "./id";
-export class Membership{private members=new Map<string,Member>();private v=0n;private listeners=new Set<(s:MembershipSnapshot)=>void>();constructor(private clock:Clock,private local:Member,private emit:(e:HAEvent)=>void){this.members.set(local.id,local)}rebindLocal(id:string){this.members.delete(this.local.id);this.local.id=id;this.members.set(id,this.local)}snapshot():MembershipSnapshot{return{version:this.v,members:[...this.members.values()].map(x=>({...x}))}}onChange(fn:(s:MembershipSnapshot)=>void){this.listeners.add(fn);return()=>this.listeners.delete(fn)}private changed(type:string,nodeId:string,data?:Record<string,unknown>){this.v++;const e={id:id("evt"),type,at:this.clock.now(),nodeId,data};this.emit(e);const s=this.snapshot();for(const l of this.listeners)l(s)}admit(node:Member){if(node.cluster!==this.local.cluster||node.service!==this.local.service)throw new AdmissionError("cluster/service mismatch");const old=this.members.get(node.id);if(old&&old.incarnation>node.incarnation)throw new AdmissionError("older incarnation");if(old&&old.address!==node.address)throw new AdmissionError("identity/address collision");this.members.set(node.id,node);this.changed("node_joined",node.id)}touch(id:string){const m=this.members.get(id);if(m)m.lastSeen=this.clock.now()}update(id:string,patch:Partial<Member>){const m=this.members.get(id);if(!m)throw new HAError("unknown member","UNKNOWN_MEMBER");this.members.set(id,{...m,...patch,lastSeen:this.clock.now()});this.changed("membership_changed",id)}remove(id:string){if(id===this.local.id)throw new HAError("cannot remove local node");if(this.members.delete(id))this.changed("node_removed",id)}setStatus(id:string,status:NodeStatus){const m=this.members.get(id);if(m&&m.status!==status){this.members.set(id,{...m,status,lastSeen:this.clock.now()});this.changed(status==="quarantined"?"node_quarantined":status==="failed"?"node_failed":"health_transition",id)}}get(id:string){return this.members.get(id)}values(){return[...this.members.values()]}size(){return this.members.size}healthy(){return this.values().filter(x=>["healthy","degraded","draining"].includes(x.status)).length}markSuspect(timeout:number){const now=this.clock.now();for(const m of this.values())if(m.id!==this.local.id&&now-m.lastSeen>timeout&&["healthy","degraded"].includes(m.status))this.setStatus(m.id,"suspect")}restore(s:MembershipSnapshot){if(s.version<this.v)throw new HAError("stale membership","STALE_MEMBERSHIP");const local=this.local;this.v=s.version;this.members.clear();for(const m of s.members)this.members.set(m.id,m);if(!this.members.has(local.id))this.members.set(local.id,local)}}
+
+const statusRank: Record<NodeStatus, number> = {
+  provision: 0, joining: 1, syncing: 2, healthy: 5, degraded: 4, draining: 3,
+  unhealthy: 2, suspect: 2, failed: 1, removed: 0, quarantined: 0, retired: 0,
+};
+
+export class Membership {
+  private members = new Map<string, Member>();
+  private v = 0n;
+  private listeners = new Set<(s: MembershipSnapshot) => void>();
+
+  constructor(private clock: Clock, private local: Member, private emit: (e: HAEvent) => void) {
+    this.members.set(local.id, local);
+  }
+
+  rebindLocal(nodeId: string) {
+    this.members.delete(this.local.id);
+    this.local.id = nodeId;
+    this.members.set(nodeId, this.local);
+  }
+
+  snapshot(): MembershipSnapshot {
+    return {
+      version: this.v,
+      members: [...this.members.values()].map(x => ({ ...x })),
+    };
+  }
+
+  onChange(fn: (s: MembershipSnapshot) => void) {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private publish() {
+    const snapshot = this.snapshot();
+    for (const listener of this.listeners) listener(snapshot);
+  }
+
+  private changed(type: string, nodeId: string, data?: Record<string, unknown>) {
+    this.v++;
+    this.emit({ id: id("evt"), type, at: this.clock.now(), nodeId, data });
+    this.publish();
+  }
+
+  private mergeMember(existing: Member | undefined, incoming: Member): Member | undefined {
+    if (!existing) return { ...incoming };
+    if (existing.cluster !== incoming.cluster || existing.service !== incoming.service) {
+      throw new AdmissionError("cluster/service mismatch");
+    }
+    if (existing.incarnation > incoming.incarnation) return existing;
+    if (incoming.incarnation > existing.incarnation) return { ...incoming };
+
+    if (existing.address !== incoming.address) {
+      throw new AdmissionError("identity/address collision");
+    }
+
+    if (incoming.lastSeen > existing.lastSeen) return { ...incoming };
+    if (incoming.lastSeen < existing.lastSeen) return existing;
+
+    return statusRank[incoming.status] > statusRank[existing.status]
+      ? { ...incoming }
+      : existing;
+  }
+
+  admit(node: Member) {
+    if (node.cluster !== this.local.cluster || node.service !== this.local.service) {
+      throw new AdmissionError("cluster/service mismatch");
+    }
+
+    const old = this.members.get(node.id);
+    if (old && old.incarnation > node.incarnation) throw new AdmissionError("older incarnation");
+    if (old && old.address !== node.address) throw new AdmissionError("identity/address collision");
+
+    const merged = this.mergeMember(old, node);
+    if (!merged) return;
+    this.members.set(node.id, merged);
+    this.changed("node_joined", node.id);
+  }
+
+  touch(nodeId: string) {
+    const member = this.members.get(nodeId);
+    if (member) member.lastSeen = this.clock.now();
+  }
+
+  update(nodeId: string, patch: Partial<Member>) {
+    const member = this.members.get(nodeId);
+    if (!member) throw new HAError("unknown member", "UNKNOWN_MEMBER");
+    this.members.set(nodeId, { ...member, ...patch, lastSeen: this.clock.now() });
+    this.changed("membership_changed", nodeId);
+  }
+
+  setLocalState(status: NodeStatus, lifecycle = this.local.lifecycle) {
+    if (this.local.status === status && this.local.lifecycle === lifecycle) return;
+    this.local.status = status;
+    this.local.lifecycle = lifecycle;
+    this.local.lastSeen = this.clock.now();
+    this.changed("local_state_changed", this.local.id, { status, lifecycle });
+  }
+
+  remove(nodeId: string) {
+    if (nodeId === this.local.id) throw new HAError("cannot remove local node");
+    if (this.members.delete(nodeId)) this.changed("node_removed", nodeId);
+  }
+
+  setStatus(nodeId: string, status: NodeStatus) {
+    const member = this.members.get(nodeId);
+    if (member && member.status !== status) {
+      this.members.set(nodeId, { ...member, status, lastSeen: this.clock.now() });
+      this.changed(
+        status === "quarantined" ? "node_quarantined" :
+        status === "failed" ? "node_failed" : "health_transition",
+        nodeId,
+      );
+    }
+  }
+
+  get(nodeId: string) {
+    return this.members.get(nodeId);
+  }
+
+  values() {
+    return [...this.members.values()];
+  }
+
+  votingMembers() {
+    return this.values().filter(member =>
+      !["provision", "joining", "syncing", "removed", "retired", "quarantined"].includes(member.status),
+    );
+  }
+
+  size() {
+    return this.members.size;
+  }
+
+  votingSize() {
+    return this.votingMembers().length;
+  }
+
+  healthy() {
+    return this.votingMembers().filter(member =>
+      ["healthy", "degraded", "draining"].includes(member.status),
+    ).length;
+  }
+
+  markSuspect(timeout: number) {
+    const now = this.clock.now();
+    for (const member of this.values()) {
+      if (
+        member.id !== this.local.id &&
+        now - member.lastSeen > timeout &&
+        ["healthy", "degraded"].includes(member.status)
+      ) this.setStatus(member.id, "suspect");
+    }
+  }
+
+  restore(snapshot: MembershipSnapshot) {
+    if (snapshot.version < this.v) throw new HAError("stale membership", "STALE_MEMBERSHIP");
+
+    let changed = false;
+    for (const incoming of snapshot.members) {
+      if (incoming.cluster !== this.local.cluster || incoming.service !== this.local.service) {
+        throw new AdmissionError("cluster/service mismatch");
+      }
+
+      const current = this.members.get(incoming.id);
+      const merged = this.mergeMember(current, incoming);
+      if (merged && JSON.stringify(merged) !== JSON.stringify(current)) {
+        this.members.set(incoming.id, merged);
+        changed = true;
+      }
+    }
+
+    this.v = snapshot.version > this.v ? snapshot.version : this.v;
+
+    if (!this.members.has(this.local.id)) {
+      this.members.set(this.local.id, this.local);
+      changed = true;
+    } else {
+      this.members.set(this.local.id, this.local);
+    }
+
+    if (changed) {
+      this.emit({
+        id: id("evt"),
+        type: "membership_synced",
+        at: this.clock.now(),
+        nodeId: this.local.id,
+        data: { version: this.v.toString(), size: this.members.size },
+      });
+      this.publish();
+    }
+  }
+}
