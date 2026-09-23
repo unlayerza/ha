@@ -54,7 +54,7 @@ export class HttpTransport implements Transport{
   }
   private endpoint(to:string){return(to.includes("://")?to:this.peers.get(to)||to).replace(/\/$/,"")+"/ha/message"}
   async send(to:string,m:ClusterMessage){await this.deliver(to,m)}
-  async broadcast(from:string,m:ClusterMessage){const normalize=(x:string)=>x.replace(/^https?:\/\//,"").replace(/\/$/,"");const sender=normalize(from);await Promise.all([...this.peers.keys()].filter(x=>normalize(x)!==sender).map(x=>this.deliver(x,m).catch(()=>{}))}
+  async broadcast(from:string,m:ClusterMessage){const normalize=(x:string)=>x.replace(/^https?:\/\//,"").replace(/\/$/,"");const sender=normalize(from);await Promise.all([...this.peers.keys()].filter(x=>normalize(x)!==sender).map(x=>this.deliver(x,m).catch(()=>{})))}
 }
 
 export class ChaosTransport implements Transport{
