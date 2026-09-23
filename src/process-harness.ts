@@ -1,4 +1,6 @@
 import {mkdir,rm} from "node:fs/promises";
+import {resourceSnapshot,type ResourceSnapshot} from "./resources";
+import type {ChaosPolicy} from "./types";
 
 export interface ProcessNode{index:number;address:string;api:number;dataDir:string;process?:Bun.Subprocess}
 
@@ -39,9 +41,25 @@ export class LocalProcessCluster{
   }
   async restart(index:number){await this.stop(index);return this.startNode(this.nodes[index])}
   async state(index:number){
-    const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/state`,{signal:AbortSignal.timeout(1000)});
+    const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/state`,{signal:AbortSignal.timeout(500)});
     if(!r.ok)throw new Error(`HA state request failed: HTTP ${r.status}`);
     return r.json()
+  }
+  async setChaos(index:number,policy:ChaosPolicy){
+    const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/chaos`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({delayMs:policy.delayMs||0,dropRate:policy.dropRate||0,duplicateRate:policy.duplicateRate||0,reorder:!!policy.reorder,partition:[...(policy.partition||[]) ]}),signal:AbortSignal.timeout(500)});
+    if(!r.ok)throw new Error(`HA chaos request failed for node ${index}: HTTP ${r.status}`);
+    return r.json()
+  }
+  async clearChaos(){await Promise.all(this.nodes.map((_,i)=>this.setChaos(i,{})))}
+  async isolate(index:number){
+    const address=this.nodes[index].address;
+    await Promise.all(this.nodes.map((n,i)=>this.setChaos(i,i===index?{partition:this.nodes.filter((_,j)=>j!==index).map(x=>x.address)}:{partition:[address]})))
+  }
+  async heal(){await this.clearChaos()}
+  async resources(includeParent=true):Promise<ResourceSnapshot>{
+    const entries=this.nodes.filter(n=>n.process).map(n=>({pid:n.process!.pid,label:`node-${n.index}`}));
+    if(includeParent)entries.unshift({pid:process.pid,label:"soak"});
+    return resourceSnapshot(entries);
   }
   async cleanup(){await this.stop();await rm(this.root,{recursive:true,force:true})}
 }
