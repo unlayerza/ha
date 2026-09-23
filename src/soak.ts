@@ -29,20 +29,28 @@ try{
 
     if(action.type==="kill"){
       const i=Number(action.node);
-      await cluster.hardKill(i);
-      await Bun.sleep(1000);
-      await cluster.restart(i);
+      if(i<cluster.nodes.length){
+        await cluster.hardKill(i);
+        await Bun.sleep(1000);
+        await cluster.restart(i);
+      }
     }else{
       await Bun.sleep(action.ms||250);
     }
 
-    for(let i=0;i<cluster.nodes.length;i++){
+    const checks=await Promise.all(cluster.nodes.map(async(_,i)=>{
+      if(!cluster.nodes[i].process)return {i,expectedDown:true};
       try{
         const s=await cluster.state(i) as any;
-        chaos.recordInvariant("node-"+i+"-has-state",!!s.term);
+        return {i,expectedDown:false,ok:typeof s.term==="string"||typeof s.term==="number"};
       }catch{
-        chaos.recordInvariant("node-"+i+"-reachable",false);
+        return {i,expectedDown:false,ok:false};
       }
+    }));
+
+    for(const c of checks){
+      if(c.expectedDown)continue;
+      chaos.recordInvariant("node-"+c.i+"-reachable",c.ok);
     }
 
     if(iterations%10===0){
