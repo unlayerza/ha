@@ -17,9 +17,22 @@ export class Membership {
   }
 
   rebindLocal(nodeId: string) {
-    this.members.delete(this.local.id);
     this.local.id = nodeId;
+    this.normalize();
     this.members.set(nodeId, this.local);
+  }
+
+  private normalize() {
+    const normalized = new Map<string, Member>();
+    for (const member of this.members.values()) {
+      const existing = normalized.get(member.id);
+      if (!existing) normalized.set(member.id, member);
+      else {
+        const merged = this.mergeMember(existing, member);
+        if (merged) normalized.set(member.id, merged);
+      }
+    }
+    this.members = normalized;
   }
 
   snapshot(): MembershipSnapshot {
@@ -160,7 +173,8 @@ export class Membership {
 
     this.v = snapshot.version > this.v ? snapshot.version : this.v;
 
-    // Local state is authoritative for this process until its next explicit state change.
+    // Collapse any legacy/key drift before restoring the local authoritative record.
+    this.normalize();
     this.members.set(this.local.id, this.local);
 
     if (changed) {
