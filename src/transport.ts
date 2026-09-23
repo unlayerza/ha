@@ -21,7 +21,7 @@ export class InMemoryTransport implements Transport{
 }
 
 const hash=(value:string)=>{let h=2166136261;for(let i=0;i<value.length;i++){h^=value.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0};
-const wire=(m:ClusterMessage)=>JSON.stringify({...m,term:m.term.toString()});
+const wire=(m:ClusterMessage)=>JSON.stringify({...m,term:m.term.toString()},(_,value)=>typeof value==="bigint"?value.toString():value);
 const unwire=(s:string)=>{const m=JSON.parse(s) as any;m.term=BigInt(m.term);return m as ClusterMessage};
 
 export class HttpTransport implements Transport{
