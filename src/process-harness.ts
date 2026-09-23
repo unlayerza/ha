@@ -13,14 +13,14 @@ export class LocalProcessCluster{
   async start(){await rm(this.root,{recursive:true,force:true});await mkdir(this.root,{recursive:true});if(this.nodes.length){await this.startNode(this.nodes[0]);await Promise.all(this.nodes.slice(1).map(n=>this.startNode(n)))}return this}
   async startNode(n:ProcessNode){
     await mkdir(n.dataDir,{recursive:true});
-    n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.seeds(),HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000"},stdout:"ignore",stderr:"ignore"});
+    n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.seeds(),HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000"},stdout:"ignore",stderr:"pipe"});
     await this.waitReady(n,5000);
     return n
   }
   private async waitReady(n:ProcessNode,timeoutMs:number){
     const deadline=Date.now()+timeoutMs;
     while(Date.now()<deadline){
-      if(!n.process||n.process.exitCode!==null)throw new Error(`HA process ${n.index} exited during startup`);
+      if(!n.process||n.process.exitCode!==null){let detail="";if(n.process?.stderr){try{detail=await new Response(n.process.stderr).text()}catch{}}throw new Error(`HA process ${n.index} exited during startup${detail?`:\n${detail.trim()}`:""}`)}
       try{
         const r=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(250)});
         if(r.ok)return;
