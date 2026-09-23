@@ -57,6 +57,23 @@ export class HttpTransport implements Transport{
   async broadcast(from:string,m:ClusterMessage){await Promise.all([...this.peers.keys()].filter(x=>x!==from).map(x=>this.deliver(x,m).catch(()=>{})))}
 }
 
+export class ChaosTransport implements Transport{
+  constructor(private inner:Transport,private policy:ChaosPolicy,private rand=()=>Math.random()){}
+  async start(h:(m:ClusterMessage)=>Promise<void>){return this.inner.start?.(h)}
+  async stop(){return this.inner.stop?.()}
+  private allowed(to:string,m:ClusterMessage){return !(this.policy.partition?.has(to)||this.policy.partition?.has(m.fromAddress||m.from))}
+  async send(to:string,m:ClusterMessage){
+    if(!this.allowed(to,m)||this.rand()<(this.policy.dropRate||0))return;
+    if(this.policy.delayMs)await Bun.sleep(this.policy.reorder?((hash(m.id)%this.policy.delayMs)+1):this.policy.delayMs);
+    await this.inner.send(to,m);
+    if(this.rand()<(this.policy.duplicateRate||0))await this.inner.send(to,m);
+  }
+  async broadcast(from:string,m:ClusterMessage){
+    if(this.rand()<(this.policy.dropRate||0))return;
+    await this.inner.broadcast(from,m);
+  }
+}
+
 export class SignedTransport implements Transport{
   constructor(private inner:Transport,private address:string,private secret:string){}
   async start(h:(m:ClusterMessage)=>Promise<void>){return this.inner.start?.(h)}
