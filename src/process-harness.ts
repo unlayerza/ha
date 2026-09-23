@@ -18,7 +18,8 @@ export class LocalProcessCluster{
     await this.waitReady(n,5000);
     return n
   }
-  private capture(stream:ReadableStream<Uint8Array>|null|undefined,target:(value:string)=>void){if(!stream)return;void (async()=>{const reader=stream.getReader();const decoder=new TextDecoder();let value="";const limit=16384;try{while(true){const part=await reader.read();if(part.done)break;if(value.length<limit)value+=decoder.decode(part.value,{stream:true}).slice(0,limit-value.length)}}catch{}target(value.slice(-limit))})()}\n  private async waitReady(n:ProcessNode,timeoutMs:number){
+  private capture(stream:ReadableStream<Uint8Array>|null|undefined,target:(value:string)=>void){if(!stream)return;void (async()=>{const reader=stream.getReader();const decoder=new TextDecoder();let value="";const limit=16384;try{while(true){const part=await reader.read();if(part.done)break;if(value.length<limit)value+=decoder.decode(part.value,{stream:true}).slice(0,limit-value.length)}}catch{}target(value.slice(-limit))})()}
+  private async waitReady(n:ProcessNode,timeoutMs:number){
     const deadline=Date.now()+timeoutMs;
     while(Date.now()<deadline){
       if(!n.process||n.process.exitCode!==null){let detail="";if(n.process?.stderr){try{detail=await new Response(n.process.stderr).text()}catch{}}throw new Error(`HA process ${n.index} exited during startup${detail?`:\n${detail.trim()}`:""}`)}
