@@ -28,6 +28,7 @@ export class Election{
   private majority(){const n=this.voters().length;return Math.floor(n/2)+1}
   private isVoter(nodeId:string){return this.voters().includes(nodeId)}
   async restore(term:bigint,votedFor:string|null){this.term=term;this.votedFor=votedFor;this.resetDeadline()}
+  async observeTerm(term:bigint){if(term<=this.term)return false;this.term=term;this.role="follower";this.votedFor=null;this.leaderId=null;this.votes.clear();this.preVotes.clear();await this.hooks.persist(this.term,null);await this.hooks.onTerm(this.term);await this.hooks.onRole(this.role,this.term);this.resetDeadline();return true}
   async start(){this.resetDeadline();this.timer=setInterval(()=>void this.tick().catch(()=>{}),Math.max(20,Math.floor(this.heartbeatMs/2)));if(this.electionAllowed&&this.isVoter(this.nodeId)&&this.voters().length===1)await this.startElection()}
   async stop(){if(this.timer)clearInterval(this.timer)}
   private async tick(){if(this.role==="leader"){if(this.clock.now()-this.lastHeartbeat>=this.heartbeatMs){this.lastHeartbeat=this.clock.now();await this.broadcastHeartbeat()}return}if(!this.electionAllowed||!this.isVoter(this.nodeId))return;if(this.clock.now()>=this.deadline)await this.startPreVote()}
