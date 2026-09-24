@@ -1,17 +1,19 @@
 # Phase 09 — Local Multi-Process Cluster
 
-- [ ] Three real Bun processes
-- [ ] Independent node ports
-- [ ] Independent node state
-- [ ] Process supervisor
-- [ ] Start/stop
-- [ ] Hard kill
-- [ ] Restart
-- [ ] Message delay
-- [ ] Message drop
-- [ ] Message duplication
-- [ ] Message reordering
-- [ ] Partition
-- [ ] Heal
-- [ ] Cluster inspection
-- [ ] Deterministic cleanup
+- [x] Three real Bun processes
+- [x] Independent node ports
+- [x] Independent node state
+- [x] Process supervisor
+- [x] Start/stop
+- [x] Hard kill
+- [x] Restart
+- [x] Message delay
+- [x] Message drop
+- [x] Message duplication
+- [x] Message reordering
+- [x] Partition
+- [x] Heal
+- [x] Cluster inspection
+- [x] Deterministic cleanup
+
+**Status:** VALIDATED. Latest campaign used 21 HA processes plus the soak supervisor and exercised the fault modes above.
