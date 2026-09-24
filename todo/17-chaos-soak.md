@@ -63,3 +63,6 @@
 **Configuration-term ordering fix:** configuration messages are handled before the normal election receiver, so a joining node could validate a leader's proposal against an older local term. Configuration snapshots, proposals, acknowledgements, and commits now advance the local election term before their configuration validation.
 
 **Process bootstrap serialization:** the local process harness now starts non-bootstrap nodes one at a time by default. Concurrent startup remains available through `HA_PROCESS_START_CONCURRENCY`; this keeps the quorum recovery gate focused on the HA failure/recovery scenario rather than concurrent initial admission, which will be covered separately as adversarial join churn.
+
+
+**Process join settle gate:** after each non-bootstrap process reports local readiness, the harness now waits for the committed voter count, membership propagation, and configuration version to settle across the already-started cluster before admitting the next process. This prevents the next join from racing the previous join's membership broadcast/committed configuration propagation.
