@@ -1,13 +1,15 @@
 # Phase 12 — Observability
 
-- [ ] Structured HA events
-- [ ] Correlation IDs
-- [ ] Node metrics
-- [ ] Heartbeat latency
-- [ ] Election duration
-- [ ] Leader changes
-- [ ] Quorum state
-- [ ] Fencing counters
-- [ ] Recovery duration
-- [ ] Health transitions
-- [ ] Structured diagnostic dump
+- [x] Structured HA events
+- [x] Correlation IDs
+- [x] Node metrics
+- [x] Heartbeat latency
+- [x] Election duration
+- [x] Leader changes
+- [x] Quorum state
+- [x] Fencing counters
+- [x] Recovery duration
+- [x] Health transitions
+- [x] Structured diagnostic dump
+
+**Status:** COMPLETE for current scope.
