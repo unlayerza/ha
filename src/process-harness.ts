@@ -62,18 +62,18 @@ export class LocalProcessCluster{
     if(!r.ok)throw new Error(`HA state request failed: HTTP ${r.status}`);
     return r.json()
   }
-  async diagnose(index:number):Promise<{index:number;status:"ready"|"starting"|"unreachable"|"dead";error?:string}>{
+  async diagnose(index:number):Promise<{index:number;status:"ready"|"starting"|"unreachable"|"dead";error?:string;stdout?:string;stderr?:string}>{
     const n=this.nodes[index];const p=n.process;if(!p||p.exitCode!==null)return{index,status:"dead"};
     const age=n.startedAt?Date.now()-n.startedAt:Infinity;
     try{
       const ready=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(750)});
-      if(!ready.ok)return{index,status:age<10000?"starting":"unreachable",error:`ready-http-${ready.status}`};
-    }catch(error){return{index,status:age<10000?"starting":"unreachable",error:classifyProcessError(error)}}
+      if(!ready.ok)return{index,status:age<10000?"starting":"unreachable",error:`ready-http-${ready.status}`,stdout:n.stdout,stderr:n.stderr};
+    }catch(error){return{index,status:age<10000?"starting":"unreachable",error:classifyProcessError(error),stdout:n.stdout,stderr:n.stderr}}
     try{
       const state=await fetch(`http://127.0.0.1:${n.api}/state`,{signal:AbortSignal.timeout(2500)});
-      if(state.ok)return{index,status:"ready"};
-      return{index,status:"unreachable",error:`state-http-${state.status}`};
-    }catch(error){return{index,status:"unreachable",error:classifyProcessError(error)}}
+      if(state.ok)return{index,status:"ready",stdout:n.stdout,stderr:n.stderr};
+      return{index,status:"unreachable",error:`state-http-${state.status}`,stdout:n.stdout,stderr:n.stderr};
+    }catch(error){return{index,status:"unreachable",error:classifyProcessError(error),stdout:n.stdout,stderr:n.stderr}}
   }
   async setChaos(index:number,policy:ChaosPolicy){
     const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/chaos`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({delayMs:policy.delayMs||0,dropRate:policy.dropRate||0,duplicateRate:policy.duplicateRate||0,reorder:!!policy.reorder,partition:[...(policy.partition||[])]}),signal:AbortSignal.timeout(3000)});
