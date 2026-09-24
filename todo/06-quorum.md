@@ -1,11 +1,13 @@
 # Phase 06 — Quorum
 
-- [ ] Membership quorum
-- [ ] Election quorum
-- [ ] Service quorum contract
-- [ ] Quorum calculation
-- [ ] Quorum gained/lost events
+- [x] Membership quorum
+- [x] Election quorum
+- [x] Service quorum contract
+- [x] Quorum calculation
+- [x] Quorum gained/lost events
 - [ ] Minority behavior
-- [ ] Recovery after quorum restoration
-- [ ] 1/3, 2/3, 3/3 tests
-- [ ] Larger-cluster tests
+- [x] Recovery after quorum restoration
+- [x] 1/3, 2/3, 3/3 tests
+- [x] Larger-cluster tests
+
+**Status:** PARTIAL. Quorum primitives exist and are exercised, but the voter set must be tied to a committed configuration. Minority/partition semantics need dedicated adversarial tests.
