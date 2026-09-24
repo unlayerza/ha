@@ -32,3 +32,6 @@
 
 
 **Join readiness fix:** non-bootstrap nodes no longer treat a membership snapshot alone as completed join synchronization; startup remains in the join loop until the node is also present in the committed voter configuration.
+
+
+**Process join routing:** process-harness seed addresses preserve the HTTP scheme so non-bootstrap nodes can actually reach the bootstrap leader during join.
