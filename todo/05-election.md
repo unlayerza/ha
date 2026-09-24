@@ -1,14 +1,16 @@
 # Phase 05 — Leader Election
 
-- [ ] Election state machine
-- [ ] Candidate state
-- [ ] Voter state
-- [ ] Election timeout
-- [ ] Quorum-aware election
-- [ ] Leader announcement
-- [ ] Leader renewal
-- [ ] Leader loss
-- [ ] Split-brain tests
-- [ ] Simultaneous election tests
-- [ ] Repeated leader failure tests
-- [ ] Deterministic election tests
+- [x] Election state machine
+- [x] Candidate state
+- [x] Voter state
+- [x] Election timeout
+- [x] Quorum-aware election
+- [x] Leader announcement
+- [x] Leader renewal
+- [x] Leader loss
+- [x] Split-brain tests
+- [x] Simultaneous election tests
+- [x] Repeated leader failure tests
+- [x] Deterministic election tests
+
+**Status:** VALIDATED by the multi-process chaos campaign. **Production gap:** election voters currently derive from mutable membership; they must use a committed configuration.
