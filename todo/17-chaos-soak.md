@@ -44,3 +44,5 @@
 
 
 **Direct join commit delivery:** committed configuration is now sent directly to the joining node as well as the normal cluster broadcast, so startup does not depend on a single broadcast reaching a newly admitted process.
+
+**Process join convergence window:** process-level HA tests now give joining nodes a 15-second protocol convergence window by default, independently of the harness readiness timeout; this avoids treating a valid multi-step configuration transition as a startup failure under concurrent process startup.
