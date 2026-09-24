@@ -36,8 +36,28 @@ export class LocalProcessCluster{
     n.stderr="";n.stdout="";n.startedAt=Date.now();n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.peers(),HA_BOOTSTRAP:n.index===0?"true":"false",HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000",HA_JOIN_TIMEOUT_MS:Bun.env.HA_PROCESS_JOIN_TIMEOUT_MS||"30000"},stdout:"pipe",stderr:"pipe"});
     n.stdoutDone=this.capture(n.process.stdout,s=>n.stdout=s);n.stderrDone=this.capture(n.process.stderr,s=>n.stderr=s);
     await this.waitReady(n,Math.max(10000,Number(Bun.env.HA_PROCESS_START_TIMEOUT_MS||35000)));
+    if(n.index>0)await this.waitClusterAdmission(n.index);
     return n
   }
+  private async waitClusterAdmission(index:number){
+    const timeout=Math.max(5000,Number(Bun.env.HA_PROCESS_JOIN_SETTLE_TIMEOUT_MS||10000));
+    const deadline=Date.now()+timeout;
+    while(Date.now()<deadline){
+      try{
+        const states=await Promise.all(this.nodes.slice(0,index+1).map((_,i)=>this.state(i) as Promise<any>));
+        const target=states[index];
+        const voters=Array.isArray(target.voters)?target.voters:[];
+        const admitted=voters.length>index&&voters.includes(this.nodeId(index));
+        const membershipSettled=states.every((state:any)=>Number(state.membershipSize||0)>=index+1);
+        const committed=states.every((state:any)=>Number(state.configurationVersion||0)>=index);
+        if(admitted&&membershipSettled&&committed)return;
+      }catch{}
+      await Bun.sleep(100);
+    }
+    const diagnostics=await Promise.all(this.nodes.slice(0,index+1).map((_,i)=>this.diagnose(i)));
+    throw new Error(`HA process ${index} joined locally but cluster admission did not settle within ${timeout}ms: ${JSON.stringify(diagnostics)}`);
+  }
+  private nodeId(index:number){return this.nodes[index]?.address||""}
   private capture(stream:ReadableStream<Uint8Array>|null|undefined,target:(value:string)=>void){if(!stream)return Promise.resolve();return(async()=>{const reader=stream.getReader();const decoder=new TextDecoder();let value="";const limit=16384;try{while(true){const part=await reader.read();if(part.done)break;if(value.length<limit)value+=decoder.decode(part.value,{stream:true}).slice(0,limit-value.length)}}catch{}target(value.slice(-limit))})()}
   private async waitReady(n:ProcessNode,timeoutMs:number){
     const deadline=Date.now()+timeoutMs;
