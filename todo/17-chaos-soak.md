@@ -1,18 +1,22 @@
 # Phase 17 — Chaos and Soak
 
-- [ ] Deterministic seed
-- [ ] Random node kill
-- [ ] Leader kill
-- [ ] Follower kill
-- [ ] Partition
-- [ ] Delay
-- [ ] Drop
-- [ ] Duplicate
-- [ ] Reorder
+- [x] Deterministic seed for campaign/action selection
+- [x] Random node kill
+- [x] Leader kill
+- [x] Follower kill
+- [x] Partition
+- [x] Delay
+- [x] Drop
+- [x] Duplicate
+- [x] Reorder
 - [ ] Quorum loss
 - [ ] Quorum recovery
-- [ ] Stale-node return
+- [x] Stale-node return
 - [ ] Rolling restart
 - [ ] 1-hour soak
 - [ ] 24-hour soak
 - [ ] 72-hour soak
+
+**Validated evidence:** 21-node / 36-second campaign, 22 observed processes, 84/84 invariant checks passed, 0 unexpected failures.
+
+**Important:** transport chaos still uses non-seeded randomness, so the entire campaign is not yet perfectly reproducible.
