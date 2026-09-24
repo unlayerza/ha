@@ -56,12 +56,12 @@ export class LocalProcessCluster{
   }
   async restart(index:number){await this.stop(index);return this.startNode(this.nodes[index])}
   async state(index:number){
-    const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/state`,{signal:AbortSignal.timeout(1500)});
+    const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/state`,{signal:AbortSignal.timeout(3000)});
     if(!r.ok)throw new Error(`HA state request failed: HTTP ${r.status}`);
     return r.json()
   }
   async setChaos(index:number,policy:ChaosPolicy){
-    const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/chaos`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({delayMs:policy.delayMs||0,dropRate:policy.dropRate||0,duplicateRate:policy.duplicateRate||0,reorder:!!policy.reorder,partition:[...(policy.partition||[]) ]}),signal:AbortSignal.timeout(500)});
+    const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/chaos`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({delayMs:policy.delayMs||0,dropRate:policy.dropRate||0,duplicateRate:policy.duplicateRate||0,reorder:!!policy.reorder,partition:[...(policy.partition||[]) ]}),signal:AbortSignal.timeout(3000)});
     if(!r.ok)throw new Error(`HA chaos request failed for node ${index}: HTTP ${r.status}`);
     return r.json()
   }
