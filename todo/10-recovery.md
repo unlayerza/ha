@@ -12,4 +12,4 @@
 - [x] Recovery after full restart
 - [x] Repeated recovery tests
 
-**Status:** PARTIAL. Recovery primitives and rejoin behavior exist and survive the current chaos campaign. Stronger recovery semantics must be tied to committed configuration and authoritative state.
+**Status:** PARTIAL. Committed configuration is persisted and synchronized before/through rejoin. Remaining work is obsolete-state recovery, replacement churn, and authoritative recovery/runbook validation.
