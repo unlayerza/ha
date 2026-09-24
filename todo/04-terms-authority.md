@@ -1,11 +1,13 @@
 # Phase 04 — Terms and Authority
 
-- [ ] Monotonic term
-- [ ] Persist/recover term
-- [ ] Authority record
-- [ ] Leader identity
-- [ ] Authority validation
-- [ ] Old-term rejection
-- [ ] Restart tests
-- [ ] Stale-message tests
-- [ ] Term monotonicity invariant
+- [x] Monotonic term
+- [x] Persist/recover term
+- [x] Authority record
+- [x] Leader identity
+- [x] Authority validation
+- [x] Old-term rejection
+- [x] Restart tests
+- [x] Stale-message tests
+- [x] Term monotonicity invariant
+
+**Status:** VALIDATED. The 21-node chaos campaign passed term convergence throughout.
