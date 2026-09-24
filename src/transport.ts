@@ -27,7 +27,7 @@ const unwire=(s:string)=>{
   m.term=BigInt(m.term);
   m.configurationVersion=BigInt(m.configurationVersion??"0");
   if(m.payload&&typeof m.payload==="object"){
-    if(typeof m.payload.version==="string"&&m.kind==="membership_snapshot")m.payload.version=BigInt(m.payload.version);
+    if(typeof m.payload.version==="string"&&(m.kind==="membership_snapshot"||m.kind==="configuration_snapshot"))m.payload.version=BigInt(m.payload.version);
     if(typeof m.payload.baseVersion==="string")m.payload.baseVersion=BigInt(m.payload.baseVersion);
     if(typeof m.payload.nextVersion==="string")m.payload.nextVersion=BigInt(m.payload.nextVersion);
     if(typeof m.payload.acknowledgements==="undefined"&&m.kind==="configuration_commit")m.payload.acknowledgements=[];
