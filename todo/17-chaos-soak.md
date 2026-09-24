@@ -66,3 +66,6 @@
 
 
 **Process join settle gate:** after each non-bootstrap process reports local readiness, the harness now waits for the committed voter count, membership propagation, and configuration version to settle across the already-started cluster before admitting the next process. This prevents the next join from racing the previous join's membership broadcast/committed configuration propagation.
+
+
+**Single-voter bootstrap admission:** first process join now commits the v0→v1 configuration directly from the existing one-voter quorum after sending the current snapshot, then delivers the committed configuration to the joiner. This removes the unnecessary proposal/ACK dependency on a node that is not yet a voter; later joins retain quorum-backed proposal/acknowledgement flow.
