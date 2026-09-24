@@ -20,6 +20,7 @@ export class Election{
   constructor(private nodeId:string,private transport:Transport,private clock:Clock,private heartbeatMs:number,private minElectionMs:number,private maxElectionMs:number,private hooks:ElectionHooks,o:ElectionOptions={}){this.random=o.random||Math.random}
   setNodeId(id:string){this.nodeId=id}
   setElectionAllowed(allowed:boolean){this.electionAllowed=allowed;if(allowed)this.resetDeadline()}
+  async stepDown(){if(this.role==="follower")return;this.role="follower";this.leaderId=null;this.votes.clear();this.preVotes.clear();this.resetDeadline();await this.hooks.onRole(this.role,this.term)}
   isElectionAllowed(){return this.electionAllowed}
   private timeout(){const span=this.maxElectionMs-this.minElectionMs;return this.minElectionMs+(span?Math.floor(this.random()*span):0)}
   private resetDeadline(){this.deadline=this.clock.now()+this.timeout()}
