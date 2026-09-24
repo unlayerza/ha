@@ -33,9 +33,9 @@ export class LocalProcessCluster{
   async startNode(n:ProcessNode){
     if(n.process&&n.process.exitCode===null)return n;
     await mkdir(n.dataDir,{recursive:true});
-    n.stderr="";n.stdout="";n.startedAt=Date.now();n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.peers(),HA_BOOTSTRAP:n.index===0?"true":"false",HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000",HA_JOIN_TIMEOUT_MS:Bun.env.HA_PROCESS_JOIN_TIMEOUT_MS||"15000"},stdout:"pipe",stderr:"pipe"});
+    n.stderr="";n.stdout="";n.startedAt=Date.now();n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.peers(),HA_BOOTSTRAP:n.index===0?"true":"false",HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000",HA_JOIN_TIMEOUT_MS:Bun.env.HA_PROCESS_JOIN_TIMEOUT_MS||"30000"},stdout:"pipe",stderr:"pipe"});
     n.stdoutDone=this.capture(n.process.stdout,s=>n.stdout=s);n.stderrDone=this.capture(n.process.stderr,s=>n.stderr=s);
-    await this.waitReady(n,Math.max(10000,Number(Bun.env.HA_PROCESS_START_TIMEOUT_MS||15000)));
+    await this.waitReady(n,Math.max(10000,Number(Bun.env.HA_PROCESS_START_TIMEOUT_MS||35000)));
     return n
   }
   private capture(stream:ReadableStream<Uint8Array>|null|undefined,target:(value:string)=>void){if(!stream)return Promise.resolve();return(async()=>{const reader=stream.getReader();const decoder=new TextDecoder();let value="";const limit=16384;try{while(true){const part=await reader.read();if(part.done)break;if(value.length<limit)value+=decoder.decode(part.value,{stream:true}).slice(0,limit-value.length)}}catch{}target(value.slice(-limit))})()}
@@ -49,7 +49,7 @@ export class LocalProcessCluster{
       }catch{}
       await Bun.sleep(50)
     }
-    const diagnostic=[n.stderr,n.stdout].filter(Boolean).join("\n").trim();throw new Error("HA process "+n.index+" did not become ready within "+timeoutMs+"ms"+(diagnostic?": "+diagnostic:""))
+    await Promise.allSettled([n.stdoutDone,n.stderrDone]);const diagnostic=[n.stderr,n.stdout].filter(Boolean).join("\n").trim();throw new Error("HA process "+n.index+" did not become ready within "+timeoutMs+"ms"+(diagnostic?": "+diagnostic:""))
   }
   async stop(index?:number){
     const targets=index===undefined?this.nodes:this.nodes.filter(n=>n.index===index);
