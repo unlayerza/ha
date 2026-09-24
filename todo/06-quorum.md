@@ -10,4 +10,4 @@
 - [x] 1/3, 2/3, 3/3 tests
 - [x] Larger-cluster tests
 
-**Status:** PARTIAL. Quorum and election decisions now derive from the persisted committed voter set, and configuration commits require current-voter quorum acknowledgements. Minority/partition semantics and transition failures need dedicated adversarial tests.
+**Status:** PARTIAL. Quorum and election decisions now derive from the persisted committed voter set, configuration commits require current-voter quorum acknowledgements, and minority configuration changes are explicitly rejected at the node layer. **Remaining:** execute dedicated partition/quorum-loss and recovery campaigns.
