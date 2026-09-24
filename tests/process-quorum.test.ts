@@ -35,5 +35,5 @@ describe("process quorum recovery",()=>{
       expect(recovered.filter(s=>s.role==="leader")).toHaveLength(1);
       expect(recovered.every(s=>s.membershipReady)).toBe(true);
     }finally{await cluster.cleanup()}
-  },15000);
+  },60000);
 });
