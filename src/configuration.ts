@@ -42,7 +42,7 @@ export class ConfigurationManager {
       this.current={version,voters,committedAt:Number(raw.committedAt)||this.clock.now()};
     }else{
       const voters=uniqueSorted(initialVoters);
-      this.current={version:0n,voters:voters.length?voters:[this.localId()],committedAt:this.clock.now()};
+      this.current={version:0n,voters:voters,committedAt:this.clock.now()};
       await this.persist();
     }
     this.pending=null;
@@ -120,6 +120,17 @@ export class ConfigurationManager {
 
   assertVersion(version:bigint){
     if(version!==this.current.version)throw new HAError("Stale configuration version","STALE_CONFIGURATION");
+  }
+
+  async installSnapshot(snapshot:ClusterConfiguration,sourceId:string){
+    if(snapshot.version<this.current.version)throw new HAError("Stale configuration snapshot","STALE_CONFIGURATION");
+    if(!snapshot.voters.includes(sourceId))throw new HAError("Configuration snapshot source is not a voter","CONFIG_AUTHORITY_REQUIRED");
+    if(this.current.voters.length>0&&!this.current.voters.includes(sourceId))throw new HAError("Configuration snapshot source is not in current configuration","CONFIG_AUTHORITY_REQUIRED");
+    this.current={version:snapshot.version,voters:uniqueSorted(snapshot.voters),committedAt:snapshot.committedAt||this.clock.now()};
+    this.pending=null;
+    await this.persist();
+    this.emit("configuration_synced",{version:this.current.version.toString(),voters:this.current.voters});
+    return this.snapshot();
   }
 
   async installCommitted(proposal:ConfigurationProposal){
