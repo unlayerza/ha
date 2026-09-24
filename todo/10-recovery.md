@@ -12,4 +12,4 @@
 - [x] Recovery after full restart
 - [x] Repeated recovery tests
 
-**Status:** PARTIAL. Committed configuration is persisted and synchronized before/through rejoin. Remaining work is obsolete-state recovery, replacement churn, and authoritative recovery/runbook validation.
+**Status:** PARTIAL. Committed configuration is persisted and synchronized before/through rejoin. Adversarial tests now cover obsolete snapshots, replacement catch-up, stale joins, and repeated configuration churn. **Remaining:** execute the recovery suite and complete authoritative recovery/runbook validation.
