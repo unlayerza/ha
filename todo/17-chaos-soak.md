@@ -49,3 +49,5 @@
 **Process quorum test timeout:** the dedicated 5-node quorum/recovery test now has a 60-second test budget so its assertion window includes the configured 15-second per-process join convergence window and bounded multi-process startup; the HA protocol timeout itself remains unchanged.
 
 **Join diagnostic window:** the process harness now gives joiners a 30-second default protocol convergence window and waits for captured stdout/stderr before reporting a readiness timeout, so a slow join cannot hide the actual configuration/election failure behind the harness timeout.
+
+**Root cause fixed:** HTTP transport now decodes `configuration_snapshot.version` from JSON back to `bigint`, matching the in-memory representation. Previously a joining process rejected the snapshot during `bigint` version validation, leaving its committed voter set empty and preventing the subsequent configuration commit from completing bootstrap.
