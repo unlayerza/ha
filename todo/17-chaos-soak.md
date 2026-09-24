@@ -52,3 +52,6 @@
 
 **Root cause fixed:** HTTP transport now decodes `configuration_snapshot.version` from JSON back to `bigint`, matching the in-memory representation. Previously a joining process rejected the snapshot during `bigint` version validation, leaving its committed voter set empty and preventing the subsequent configuration commit from completing bootstrap.
 **Join configuration ordering hardening:** bootstrap v0→v1 joins may accept the initial proposal directly, while later joins first receive the committed configuration snapshot and then receive the next configuration proposal. This preserves the joiner's configuration-version precondition for v1→v2 and later transitions; the process quorum test remains the validation gate.
+
+
+**Join proposal retry hardening:** duplicate join requests for a node already covered by an in-flight configuration proposal now resend that proposal instead of aborting and replacing it. This prevents the joiner's 250ms retry loop from repeatedly invalidating the same configuration transition before voter acknowledgements can commit it.
