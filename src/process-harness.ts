@@ -16,7 +16,7 @@ export class LocalProcessCluster{
   constructor(private count=3,private basePort=7301,private apiBase=7401,private root="./.ha-process",private secret="local-test-secret"){
     for(let i=0;i<count;i++)this.nodes.push({index:i,address:`http://127.0.0.1:${basePort+i}`,api:apiBase+i,dataDir:`${root}/${i}`})
   }
-  private seeds(){return this.nodes[0]?.address.replace(/^https?:\/\//,"")||""}
+  private seeds(){return this.nodes[0]?.address||""}
   private peers(){return this.nodes.map(n=>n.address).join(",")}
   async start(){
     await rm(this.root,{recursive:true,force:true});
