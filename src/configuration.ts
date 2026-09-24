@@ -38,7 +38,7 @@ export class ConfigurationManager {
     if(raw){
       const version=BigInt(String(raw.version??"0"));
       const voters=uniqueSorted(Array.isArray(raw.voters)?raw.voters:[]);
-      if(version<0n||voters.length===0)throw new HAError("Invalid committed configuration","CORRUPT_CONFIGURATION");
+      if(version<0n||(version>0n&&voters.length===0))throw new HAError("Invalid committed configuration","CORRUPT_CONFIGURATION");
       this.current={version,voters,committedAt:Number(raw.committedAt)||this.clock.now()};
     }else{
       const voters=uniqueSorted(initialVoters);
