@@ -33,7 +33,7 @@ export class LocalProcessCluster{
   async startNode(n:ProcessNode){
     if(n.process&&n.process.exitCode===null)return n;
     await mkdir(n.dataDir,{recursive:true});
-    n.stderr="";n.stdout="";n.startedAt=Date.now();n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.peers(),HA_BOOTSTRAP:n.index===0?"true":"false",HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000"},stdout:"pipe",stderr:"pipe"});
+    n.stderr="";n.stdout="";n.startedAt=Date.now();n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.peers(),HA_BOOTSTRAP:n.index===0?"true":"false",HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000",HA_JOIN_TIMEOUT_MS:Bun.env.HA_PROCESS_JOIN_TIMEOUT_MS||"15000"},stdout:"pipe",stderr:"pipe"});
     n.stdoutDone=this.capture(n.process.stdout,s=>n.stdout=s);n.stderrDone=this.capture(n.process.stderr,s=>n.stderr=s);
     await this.waitReady(n,Math.max(10000,Number(Bun.env.HA_PROCESS_START_TIMEOUT_MS||15000)));
     return n
