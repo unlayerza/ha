@@ -41,3 +41,6 @@
 **Single-voter bootstrap:** election startup now immediately establishes the sole committed voter as leader instead of waiting for the election timeout; this removes a bootstrap/join race where joiners could repeatedly reach a healthy but not-yet-authoritative seed.
 
 **Join authority diagnostics:** configuration proposals now record the exact election, authority, quorum, term, and committed-configuration state when a leader cannot authorize a join transition, plus successful proposal initiation metadata.
+
+
+**Direct join commit delivery:** committed configuration is now sent directly to the joining node as well as the normal cluster broadcast, so startup does not depend on a single broadcast reaching a newly admitted process.
