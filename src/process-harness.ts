@@ -23,7 +23,7 @@ export class LocalProcessCluster{
     await mkdir(this.root,{recursive:true});
     if(this.nodes.length){
       await this.startNode(this.nodes[0]);
-      const concurrency=Math.max(1,Number(Bun.env.HA_PROCESS_START_CONCURRENCY||4));
+      const concurrency=Math.max(1,Number(Bun.env.HA_PROCESS_START_CONCURRENCY||1));
       for(let offset=1;offset<this.nodes.length;offset+=concurrency){
         await Promise.all(this.nodes.slice(offset,offset+concurrency).map(n=>this.startNode(n)));
       }
