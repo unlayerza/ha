@@ -72,3 +72,6 @@
 
 
 **First-join delivery fix:** the one-voter bootstrap path now delivers the committed v0→v1 configuration directly to the joiner before any optional snapshot/proposal flow. This removes a blocking pre-commit snapshot round trip from the only transition where the joiner has no committed voter configuration yet; later joins retain snapshot-before-proposal ordering.
+
+
+**Bootstrap commit quorum fix:** the committed-configuration installer now treats authenticated v0→v1 bootstrap as a special initial transition: with no existing voters, quorum is established by the authenticated proposer acknowledgement rather than incorrectly requiring an acknowledgement from an already-committed voter set of size zero.
