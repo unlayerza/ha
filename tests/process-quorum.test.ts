@@ -13,7 +13,10 @@ describe("process quorum recovery",()=>{
         if(initial.filter(s=>s.role==="leader").length===1&&initial.every(s=>s.quorum===true))break;
         await Bun.sleep(200);
       }
-      expect(initial.filter(s=>s.role==="leader")).toHaveLength(1);
+      if(initial.filter(s=>s.role==="leader").length!==1){
+        const diagnostics=await Promise.all(cluster.nodes.map((_,i)=>cluster.diagnose(i)));
+        throw new Error(`initial election failed: ${JSON.stringify({states:initial,diagnostics})}`);
+      }
       expect(initial.every(s=>s.quorum===true)).toBe(true);
 
       await cluster.partitionGroups([[0,1],[2,3,4]]);
