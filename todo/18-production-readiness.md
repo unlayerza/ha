@@ -14,8 +14,9 @@
 - [ ] Service contracts frozen
 
 **Current blockers:**
-- Adversarial committed configuration/fencing behavior is still outstanding.
+- Adversarial committed configuration/fencing tests have been added but still need execution on target environments.
 - Target-infrastructure 1h/24h/72h evidence is outstanding.
-- Adversarial configuration-change/fencing tests are outstanding.
-- Target-infrastructure 1h/24h/72h evidence is outstanding.
+- Recovery/runbooks are outstanding.
+- Upgrade/rollback is outstanding.
+- Service contracts must be frozen.
 - External Database/Identity/Voice consumer integration is outstanding.
