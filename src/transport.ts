@@ -21,8 +21,19 @@ export class InMemoryTransport implements Transport{
 }
 
 const hash=(value:string)=>{let h=2166136261;for(let i=0;i<value.length;i++){h^=value.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0};
-const wire=(m:ClusterMessage)=>JSON.stringify({...m,term:m.term.toString()},(_,value)=>typeof value==="bigint"?value.toString():value);
-const unwire=(s:string)=>{const m=JSON.parse(s) as any;m.term=BigInt(m.term);return m as ClusterMessage};
+const wire=(m:ClusterMessage)=>JSON.stringify({...m,term:m.term.toString(),configurationVersion:m.configurationVersion.toString()},(_,value)=>typeof value==="bigint"?value.toString():value);
+const unwire=(s:string)=>{
+  const m=JSON.parse(s) as any;
+  m.term=BigInt(m.term);
+  m.configurationVersion=BigInt(m.configurationVersion??"0");
+  if(m.payload&&typeof m.payload==="object"){
+    if(typeof m.payload.version==="string"&&m.kind==="membership_snapshot")m.payload.version=BigInt(m.payload.version);
+    if(typeof m.payload.baseVersion==="string")m.payload.baseVersion=BigInt(m.payload.baseVersion);
+    if(typeof m.payload.nextVersion==="string")m.payload.nextVersion=BigInt(m.payload.nextVersion);
+    if(typeof m.payload.acknowledgements==="undefined"&&m.kind==="configuration_commit")m.payload.acknowledgements=[];
+  }
+  return m as ClusterMessage;
+};
 
 export class HttpTransport implements Transport{
   private server?:ReturnType<typeof Bun.serve>;
