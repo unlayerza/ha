@@ -36,6 +36,15 @@ const started=Date.now();
 const end=started+duration;
 let iterations=0;
 let actionErrors=0;
+const actionErrorTypes:Record<string,number>={};
+const classifyActionError=(error:unknown)=>{
+  const message=String(error).toLowerCase();
+  if(message.includes("did not become ready")||message.includes("exited during startup"))return "ready-timeout";
+  if(message.includes("unable to connect")||message.includes("connection refused")||message.includes("econnrefused"))return "connect-error";
+  if(message.includes("timed out")||message.includes("timeout"))return "request-timeout";
+  if(message.includes("http "))return "http-error";
+  return "other";
+};
 
 try{
   resourceTimer=setInterval(()=>void recordResources(),5000);
@@ -91,7 +100,9 @@ try{
 
     }catch(error){
       actionErrors++;
-      console.warn("HA soak action failed:",String(error));
+      const kind=classifyActionError(error);
+      actionErrorTypes[kind]=(actionErrorTypes[kind]||0)+1;
+      if(!compact)console.warn("HA soak action failed:",String(error));
       await cluster.heal().catch(()=>{});
       await Bun.sleep(250);
     }
@@ -99,14 +110,16 @@ try{
     const checks=await Promise.all(cluster.nodes.map(async(_,i)=>{
       try{
         const state=await cluster.state(i) as any;
-        return {i,ok:true,state,error:undefined};
+        return {i,ok:true,state,error:undefined,health:{index:i,status:"ready" as const}};
       }catch(error){
-        return {i,ok:false,state:undefined,error:String(error)};
+        const health=await cluster.diagnose(i);
+        return {i,ok:false,state:undefined,error:String(error),health};
       }
     }));
     const reachable=checks.filter(c=>c.ok);
     const allReachable=reachable.length===cluster.nodes.length;
-    chaos.recordInvariant("all-nodes-reachable",allReachable,checks.filter(c=>!c.ok).map(c=>`node-${c.i}:${c.error}`).join(";"));
+    const healthFailures=checks.filter(c=>!c.ok).map(c=>`node-${c.i}:${c.health.status}${c.health.error?`:${c.health.error}`:""}`);
+    chaos.recordInvariant("all-nodes-reachable",allReachable,healthFailures.join(";"));
 
     const leaders=reachable.filter(c=>c.state.role==="leader").map(c=>c.state.leaderId||String(c.i));
     chaos.recordInvariant("no-split-brain",new Set(leaders).size<=1,leaders.join(","));
@@ -140,10 +153,13 @@ try{
     durationMs:(campaign.finishedAt||Date.now())-campaign.startedAt,
     iterations,
     actionErrors,
+    actionErrorTypes,
     actionCounts:campaign.actionCounts,
     invariantStats:campaign.invariantStats,
     failures:campaign.failures,
     unexpectedFailures:campaign.unexpectedFailures,
+    nodeHealth:(await Promise.all(cluster.nodes.map((_,i)=>cluster.diagnose(i)))).reduce((a,h)=>(a[h.status]++,a),{ready:0,starting:0,unreachable:0,dead:0} as Record<string,number>),
+    failureCounts:campaign.failures.reduce((a,name)=>(a[name]=(a[name]||0)+1,a),{} as Record<string,number>),
     expectedProcessCount:nodeCount+1,
     resources:{
       supported:resourceSamples.some(s=>s.supported),
@@ -157,7 +173,13 @@ try{
       }:null,
     },
   };
-  if(compact)console.log(JSON.stringify(result));else console.log(JSON.stringify({...campaign,...result},null,2));;
+  if(compact){
+    const boundedFailures=campaign.unexpectedFailures.length>10?[
+      ...campaign.unexpectedFailures.slice(0,5),
+      ...campaign.unexpectedFailures.slice(-5),
+    ]:campaign.unexpectedFailures;
+    console.log(JSON.stringify({...result,unexpectedFailureCount:campaign.unexpectedFailures.length,unexpectedFailures:boundedFailures}));
+  }else console.log(JSON.stringify({...campaign,...result},null,2));
 }finally{
   if(resourceTimer)clearInterval(resourceTimer);
   await cluster.cleanup();
