@@ -6,9 +6,15 @@ describe("process quorum recovery",()=>{
     const cluster=new LocalProcessCluster(5,7801,7901,"./.ha-quorum-process");
     try{
       await cluster.start();
-      await Bun.sleep(1800);
-      const initial=await Promise.all(cluster.nodes.map((_,i)=>cluster.state(i) as Promise<any>));
+      const deadline=Date.now()+8000;
+      let initial:any[]=[];
+      while(Date.now()<deadline){
+        initial=await Promise.all(cluster.nodes.map((_,i)=>cluster.state(i) as Promise<any>));
+        if(initial.filter(s=>s.role==="leader").length===1&&initial.every(s=>s.quorum===true))break;
+        await Bun.sleep(200);
+      }
       expect(initial.filter(s=>s.role==="leader")).toHaveLength(1);
+      expect(initial.every(s=>s.quorum===true)).toBe(true);
 
       await cluster.partitionGroups([[0,1],[2,3,4]]);
       await Bun.sleep(1800);
