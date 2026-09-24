@@ -29,3 +29,6 @@
 **Join protocol ordering:** election term/vote state is now restored before the transport is exposed to join traffic, so configuration proposals received during bootstrap/join validation use the persisted current term rather than the initial zero term.
 **Bootstrap configuration authorization:** an uninitialized joiner (empty committed voter set) may accept only the version-0→1 configuration proposed by its authenticated proposer when that proposer is explicitly included in the proposed voter set; later configuration changes still require a committed voter.
 **Bootstrap proposal delivery:** the node message handler now permits an uninitialized joiner to acknowledge the authenticated initial configuration proposal when it is explicitly included in that proposal; this matches the configuration manager's constrained v0→v1 bootstrap rule.
+
+
+**Join readiness fix:** non-bootstrap nodes no longer treat a membership snapshot alone as completed join synchronization; startup remains in the join loop until the node is also present in the committed voter configuration.
