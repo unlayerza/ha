@@ -9,7 +9,7 @@ Phases are ordered implementation contracts. This roadmap is updated as implemen
 - [x] 02 Membership — core membership and convergence validated; committed configuration transitions implemented; concurrent churn remains
 - [x] 03 Health and readiness
 - [x] 04 Terms and authority
-- [x] 05 Election — multi-process chaos validated; stable committed voter configuration remains
+- [x] 05 Election — multi-process chaos validated; elections now bind to committed configuration versions and voter sets
 - [ ] 06 Quorum — primitives implemented; committed voter-set semantics remain
 - [x] 07 Fencing — core fencing implemented; adversarial committed-configuration tests remain
 - [x] 08 Lifecycle and drain
