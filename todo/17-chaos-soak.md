@@ -69,3 +69,6 @@
 
 
 **Single-voter bootstrap admission:** first process join now commits the v0→v1 configuration directly from the existing one-voter quorum after sending the current snapshot, then delivers the committed configuration to the joiner. This removes the unnecessary proposal/ACK dependency on a node that is not yet a voter; later joins retain quorum-backed proposal/acknowledgement flow.
+
+
+**First-join delivery fix:** the one-voter bootstrap path now delivers the committed v0→v1 configuration directly to the joiner before any optional snapshot/proposal flow. This removes a blocking pre-commit snapshot round trip from the only transition where the joiner has no committed voter configuration yet; later joins retain snapshot-before-proposal ordering.
