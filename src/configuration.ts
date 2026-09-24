@@ -80,6 +80,7 @@ export class ConfigurationManager {
   accept(proposal:ConfigurationProposal){
     if(proposal.baseVersion!==this.current.version)throw new HAError("Stale configuration proposal","STALE_CONFIGURATION");
     if(proposal.nextVersion!==this.current.version+1n)throw new HAError("Invalid configuration version","INVALID_CONFIGURATION");
+    if(!this.current.voters.includes(proposal.proposer)&&!proposal.voters.includes(proposal.proposer))throw new HAError("Unauthorized configuration proposer","CONFIG_AUTHORITY_REQUIRED");
     const voters=uniqueSorted(proposal.voters);
     if(!voters.length||voters.length!==proposal.voters.length)throw new HAError("Invalid configuration voters","INVALID_CONFIGURATION");
     if(this.pending&&this.pending.id!==proposal.id)throw new HAError("Conflicting configuration change","CONFIG_CHANGE_CONFLICT");
