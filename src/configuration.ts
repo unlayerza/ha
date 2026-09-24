@@ -158,10 +158,7 @@ export class ConfigurationManager {
     if(!this.current.voters.includes(proposal.proposer)&&!(this.current.voters.length===0&&proposal.baseVersion===0n&&proposal.nextVersion===1n&&proposal.voters.includes(proposal.proposer)))throw new HAError("Configuration proposer is not a committed voter","CONFIG_AUTHORITY_REQUIRED");
     const voters=uniqueSorted(proposal.voters);
     if(!this.transitionIsSafe(voters))throw new HAError("Configuration commit does not preserve quorum intersection","UNSAFE_CONFIGURATION_TRANSITION");
-    const acknowledgements=new Set(proposal.acknowledgements||[]);
-    const currentAcks=this.current.voters.filter(v=>acknowledgements.has(v)).length;
-    if(currentAcks<this.majority())throw new HAError("Configuration commit lacks voter quorum","CONFIGURATION_QUORUM_REQUIRED");
-    this.current={version:proposal.nextVersion,voters:uniqueSorted(proposal.voters),committedAt:this.clock.now()};
+    const bootstrap=this.current.voters.length===0&&proposal.baseVersion===0n&&proposal.nextVersion===1n&&proposal.voters.includes(proposal.proposer);const acknowledgements=new Set(proposal.acknowledgements||[]);const currentAcks=this.current.voters.filter(v=>acknowledgements.has(v)).length;if(!bootstrap&&currentAcks<this.majority())throw new HAError("Configuration commit lacks voter quorum","CONFIGURATION_QUORUM_REQUIRED");if(bootstrap&&!acknowledgements.has(proposal.proposer))throw new HAError("Bootstrap configuration commit lacks proposer acknowledgement","CONFIGURATION_QUORUM_REQUIRED");this.current={version:proposal.nextVersion,voters:uniqueSorted(proposal.voters),committedAt:this.clock.now()};
     this.pending=null;
     await this.persist();
     this.emit("configuration_committed",{id:proposal.id,version:this.current.version.toString(),voters:this.current.voters});
