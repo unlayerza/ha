@@ -24,4 +24,4 @@ Phases are ordered implementation contracts. This roadmap is updated as implemen
 - [ ] 17 Chaos and soak — campaign infrastructure validated; 1h/24h/72h target-environment evidence remains
 - [ ] 18 Production readiness — not yet complete
 
-**Current next sprint:** committed membership/configuration and its integration with quorum/election/fencing.
+**Current next sprint:** adversarial committed-configuration correctness, fencing during transitions, and long-duration target-environment validation.
