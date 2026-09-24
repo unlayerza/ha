@@ -127,6 +127,7 @@ export class ConfigurationManager {
     if(snapshot.version<this.current.version)throw new HAError("Stale configuration snapshot","STALE_CONFIGURATION");
     if(!snapshot.voters.includes(sourceId))throw new HAError("Configuration snapshot source is not a voter","CONFIG_AUTHORITY_REQUIRED");
     if(this.current.voters.length>0&&!this.current.voters.includes(sourceId))throw new HAError("Configuration snapshot source is not in current configuration","CONFIG_AUTHORITY_REQUIRED");
+    if(snapshot.version===this.current.version&&this.current.voters.length>0&&uniqueSorted(snapshot.voters).join(",")!==this.current.voters.join(","))throw new HAError("Conflicting configuration at committed version","CONFIG_CHANGE_CONFLICT");
     this.current={version:snapshot.version,voters:uniqueSorted(snapshot.voters),committedAt:snapshot.committedAt||this.clock.now()};
     this.pending=null;
     await this.persist();
