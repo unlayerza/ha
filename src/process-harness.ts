@@ -67,6 +67,25 @@ export class LocalProcessCluster{
     if(!r.ok)throw new Error(`HA state request failed: HTTP ${r.status}`);
     return r.json()
   }
+  async diagnose(index:number):Promise<{index:number;status:"ready"|"starting"|"unreachable"|"dead";error?:string}>{
+    const n=this.nodes[index];
+    const p=n.process;
+    if(!p||p.exitCode!==null)return {index,status:"dead"};
+    const age=n.startedAt?Date.now()-n.startedAt:Infinity;
+    try{
+      const ready=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(500)});
+      if(!ready.ok)return {index,status:age<10000?"starting":"unreachable",error:`ready-http-${ready.status}`};
+    }catch(error){
+      return {index,status:age<10000?"starting":"unreachable",error:classifyProcessError(error)};
+    }
+    try{
+      const state=await fetch(`http://127.0.0.1:${n.api}/state`,{signal:AbortSignal.timeout(1000)});
+      if(state.ok)return {index,status:"ready"};
+      return {index,status:"unreachable",error:`state-http-${state.status}`};
+    }catch(error){
+      return {index,status:"unreachable",error:classifyProcessError(error)};
+    }
+  }
   async setChaos(index:number,policy:ChaosPolicy){
     const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/chaos`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({delayMs:policy.delayMs||0,dropRate:policy.dropRate||0,duplicateRate:policy.duplicateRate||0,reorder:!!policy.reorder,partition:[...(policy.partition||[]) ]}),signal:AbortSignal.timeout(3000)});
     if(!r.ok)throw new Error(`HA chaos request failed for node ${index}: HTTP ${r.status}`);
@@ -75,7 +94,7 @@ export class LocalProcessCluster{
   async clearChaos(){await Promise.all(this.nodes.map((_,i)=>this.setChaos(i,{})))}
   async isolate(index:number){
     const address=this.nodes[index].address;
-    await Promise.all(this.nodes.map((n,i)=>this.setChaos(i,i===index?{partition:this.nodes.filter((_,j)=>j!==index).map(x=>x.address)}:{partition:[address]})))
+    await Promise.all(this.nodes.map((n,i)=>this.setChaos(i,i===index?{partition:this.nodes.filter((_,j)=>j!==index).map(x=>x.address)}:{partition:[address]}))
   }
   async heal(){await this.clearChaos()}
   async resources(includeParent=true):Promise<ResourceSnapshot>{
