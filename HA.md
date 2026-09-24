@@ -371,29 +371,6 @@ Metrics:
 - stale-node rejections
 - recovery duration
 
-## 22. Development Order
-
-1. Foundation
-2. Node identity
-3. Membership
-4. Health/readiness
-5. Terms
-6. Election
-7. Quorum
-8. Fencing
-9. Lifecycle/drain
-10. Local multi-process harness
-11. Failure injection
-12. Recovery/rejoin
-13. Security/audit
-14. Observability
-15. Service adapter contract
-16. Database integration
-17. Identity integration
-18. Voice integration
-19. Long-running chaos/soak
-20. Production hardening
-
 ## 21. Current Verified State
 
 As of 2026-09-24:
@@ -411,9 +388,18 @@ This validates the current cluster foundation. It does **not** yet constitute pr
 
 The next major correctness milestone is **committed membership/configuration**: configuration proposals, quorum acknowledgement, committed configuration versions, stable voter sets, persistence/recovery of committed configuration, and adversarial tests against obsolete configurations.
 
-## 22. Development Order
+## 22. Current Development Order
+
+1. **Committed membership/configuration** — quorum-committed configuration, stable voter set, configuration versioning, persistence/recovery and stale-configuration rejection.
+2. **Adversarial consensus testing** — joins/leaves/replacements, concurrent membership changes, partitions during configuration changes, restart during commit and obsolete-node resurrection tests.
+3. **Production hardening** — bounded shutdown, transport timeouts, resource limits, operational diagnostics, reproducible chaos transport and target-environment soak campaigns.
+4. **Service consumer validation** — prove Database, Identity and Voice consume the generic contracts without embedding HA internals.
+5. **Long-running operational evidence** — 1h, 24h and 72h campaigns on target infrastructure.
+
+## 23. Definition of Done
 
 HA is ready for service consumption when:
+
 - a 3-node cluster can elect authority;
 - leader loss is detected;
 - a replacement leader can be elected;
@@ -421,6 +407,9 @@ HA is ready for service consumption when:
 - partitions do not create dual authority;
 - nodes can drain and rejoin;
 - deterministic chaos repeatedly passes;
+- membership/configuration changes are quorum committed;
+- elections use a stable committed voter set;
+- committed configuration survives restart and rejects obsolete configurations;
 - a fake non-database service can consume HA;
 - Database can consume it without embedding HA internals;
 - Identity and Voice can consume the same core contracts.
