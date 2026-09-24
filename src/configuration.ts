@@ -70,6 +70,7 @@ export class ConfigurationManager {
     if(this.pending)throw new HAError("Configuration change already in progress","CONFIG_CHANGE_IN_PROGRESS");
     const next=uniqueSorted(voters);
     if(!next.length)throw new HAError("Configuration must contain at least one voter","INVALID_CONFIGURATION");
+    if(!next.includes(proposer))throw new HAError("A configuration proposer cannot remove itself","CONFIG_AUTHORITY_REQUIRED");
     if(next.length===this.current.voters.length&&next.every((v,i)=>v===this.current.voters[i]))throw new HAError("Configuration is unchanged","CONFIGURATION_UNCHANGED");
     const p={id:id("cfg"),baseVersion:this.current.version,nextVersion:this.current.version+1n,voters:next,proposer,acknowledgements:[proposer]};
     this.pending=p;
