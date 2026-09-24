@@ -57,3 +57,5 @@
 **Join proposal retry hardening:** duplicate join requests for a node already covered by an in-flight configuration proposal now resend that proposal instead of aborting and replacing it. This prevents the joiner's 250ms retry loop from repeatedly invalidating the same configuration transition before voter acknowledgements can commit it.
 
 **Join routing hardening:** seed nodes that are no longer leader now forward join requests to the currently known leader instead of rejecting them. This keeps bootstrap/join traffic functional across leader changes while preserving configuration authority at the leader.
+
+**Forwarded-join address fix:** when a seed forwards a join request to the leader, the transport envelope's fromAddress belongs to the forwarding seed. Join configuration delivery now targets the joining member's advertised address instead, preventing configuration snapshots/proposals/commits from being sent back to the seed.
