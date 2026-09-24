@@ -1,14 +1,14 @@
-import {mkdir,rm} from "node:fs/promises";
-import {resourceSnapshot,type ResourceSnapshot} from "./resources";
-import type {ChaosPolicy} from "./types";
+import{mkdir,rm}from"node:fs/promises";
+import{resourceSnapshot,type ResourceSnapshot}from"./resources";
+import type{ChaosPolicy}from"./types";
 
 export interface ProcessNode{index:number;address:string;api:number;dataDir:string;process?:Bun.Subprocess;startedAt?:number;stderr?:string;stdout?:string;stderrDone?:Promise<void>;stdoutDone?:Promise<void>}
 
 export function classifyProcessError(error:unknown){
   const message=String(error).toLowerCase();
-  if(message.includes("unable to connect")||message.includes("connection refused")||message.includes("econnrefused"))return "connect-error";
-  if(message.includes("timed out")||message.includes("timeout"))return "request-timeout";
-  return "other";
+  if(message.includes("unable to connect")||message.includes("connection refused")||message.includes("econnrefused"))return"connect-error";
+  if(message.includes("timed out")||message.includes("timeout"))return"request-timeout";
+  return"other";
 }
 
 export class LocalProcessCluster{
@@ -18,7 +18,18 @@ export class LocalProcessCluster{
   }
   private seeds(){return this.nodes[0]?.address.replace(/^https?:\/\//,"")||""}
   private peers(){return this.nodes.map(n=>n.address).join(",")}
-  async start(){await rm(this.root,{recursive:true,force:true});await mkdir(this.root,{recursive:true});if(this.nodes.length){await this.startNode(this.nodes[0]);await Promise.all(this.nodes.slice(1).map(n=>this.startNode(n)))}return this}
+  async start(){
+    await rm(this.root,{recursive:true,force:true});
+    await mkdir(this.root,{recursive:true});
+    if(this.nodes.length){
+      await this.startNode(this.nodes[0]);
+      const concurrency=Math.max(1,Number(Bun.env.HA_PROCESS_START_CONCURRENCY||4));
+      for(let offset=1;offset<this.nodes.length;offset+=concurrency){
+        await Promise.all(this.nodes.slice(offset,offset+concurrency).map(n=>this.startNode(n)));
+      }
+    }
+    return this
+  }
   async startNode(n:ProcessNode){
     if(n.process&&n.process.exitCode===null)return n;
     await mkdir(n.dataDir,{recursive:true});
@@ -27,7 +38,7 @@ export class LocalProcessCluster{
     await this.waitReady(n,5000);
     return n
   }
-  private capture(stream:ReadableStream<Uint8Array>|null|undefined,target:(value:string)=>void){if(!stream)return Promise.resolve();return (async()=>{const reader=stream.getReader();const decoder=new TextDecoder();let value="";const limit=16384;try{while(true){const part=await reader.read();if(part.done)break;if(value.length<limit)value+=decoder.decode(part.value,{stream:true}).slice(0,limit-value.length)}}catch{}target(value.slice(-limit))})()}
+  private capture(stream:ReadableStream<Uint8Array>|null|undefined,target:(value:string)=>void){if(!stream)return Promise.resolve();return(async()=>{const reader=stream.getReader();const decoder=new TextDecoder();let value="";const limit=16384;try{while(true){const part=await reader.read();if(part.done)break;if(value.length<limit)value+=decoder.decode(part.value,{stream:true}).slice(0,limit-value.length)}}catch{}target(value.slice(-limit))})()}
   private async waitReady(n:ProcessNode,timeoutMs:number){
     const deadline=Date.now()+timeoutMs;
     while(Date.now()<deadline){
@@ -42,25 +53,9 @@ export class LocalProcessCluster{
   }
   async stop(index?:number){
     const targets=index===undefined?this.nodes:this.nodes.filter(n=>n.index===index);
-    await Promise.all(targets.map(async n=>{
-      const p=n.process;
-      if(!p)return;
-      p.kill("SIGTERM");
-      const deadline=Date.now()+1500;
-      while(p.exitCode===null&&Date.now()<deadline)await Bun.sleep(25);
-      if(p.exitCode===null)p.kill("SIGKILL");
-      await p.exited;
-      n.process=undefined;n.startedAt=undefined;
-    }));
+    await Promise.all(targets.map(async n=>{const p=n.process;if(!p)return;p.kill("SIGTERM");const deadline=Date.now()+1500;while(p.exitCode===null&&Date.now()<deadline)await Bun.sleep(25);if(p.exitCode===null)p.kill("SIGKILL");await p.exited;n.process=undefined;n.startedAt=undefined;}));
   }
-  async hardKill(index:number){
-    const n=this.nodes[index];
-    const p=n.process;
-    if(!p)return;
-    p.kill("SIGKILL");
-    await p.exited;
-    n.process=undefined;n.startedAt=undefined;
-  }
+  async hardKill(index:number){const n=this.nodes[index];const p=n.process;if(!p)return;p.kill("SIGKILL");await p.exited;n.process=undefined;n.startedAt=undefined}
   async restart(index:number){await this.stop(index);return this.startNode(this.nodes[index])}
   async state(index:number){
     const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/state`,{signal:AbortSignal.timeout(3000)});
@@ -68,43 +63,29 @@ export class LocalProcessCluster{
     return r.json()
   }
   async diagnose(index:number):Promise<{index:number;status:"ready"|"starting"|"unreachable"|"dead";error?:string}>{
-    const n=this.nodes[index];
-    const p=n.process;
-    if(!p||p.exitCode!==null)return {index,status:"dead"};
+    const n=this.nodes[index];const p=n.process;if(!p||p.exitCode!==null)return{index,status:"dead"};
     const age=n.startedAt?Date.now()-n.startedAt:Infinity;
     try{
-      const ready=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(500)});
-      if(!ready.ok)return {index,status:age<10000?"starting":"unreachable",error:`ready-http-${ready.status}`};
-    }catch(error){
-      return {index,status:age<10000?"starting":"unreachable",error:classifyProcessError(error)};
-    }
+      const ready=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(750)});
+      if(!ready.ok)return{index,status:age<10000?"starting":"unreachable",error:`ready-http-${ready.status}`};
+    }catch(error){return{index,status:age<10000?"starting":"unreachable",error:classifyProcessError(error)}}
     try{
-      const state=await fetch(`http://127.0.0.1:${n.api}/state`,{signal:AbortSignal.timeout(1000)});
-      if(state.ok)return {index,status:"ready"};
-      return {index,status:"unreachable",error:`state-http-${state.status}`};
-    }catch(error){
-      return {index,status:"unreachable",error:classifyProcessError(error)};
-    }
+      const state=await fetch(`http://127.0.0.1:${n.api}/state`,{signal:AbortSignal.timeout(2500)});
+      if(state.ok)return{index,status:"ready"};
+      return{index,status:"unreachable",error:`state-http-${state.status}`};
+    }catch(error){return{index,status:"unreachable",error:classifyProcessError(error)}}
   }
   async setChaos(index:number,policy:ChaosPolicy){
-    const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/chaos`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({delayMs:policy.delayMs||0,dropRate:policy.dropRate||0,duplicateRate:policy.duplicateRate||0,reorder:!!policy.reorder,partition:[...(policy.partition||[]) ]}),signal:AbortSignal.timeout(3000)});
+    const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/chaos`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({delayMs:policy.delayMs||0,dropRate:policy.dropRate||0,duplicateRate:policy.duplicateRate||0,reorder:!!policy.reorder,partition:[...(policy.partition||[])]}),signal:AbortSignal.timeout(3000)});
     if(!r.ok)throw new Error(`HA chaos request failed for node ${index}: HTTP ${r.status}`);
     return r.json()
   }
   async clearChaos(){await Promise.all(this.nodes.map((_,i)=>this.setChaos(i,{})))}
-  async isolate(index:number){
-    const address=this.nodes[index].address;
-    const peers=this.nodes.filter((_,j)=>j!==index).map(x=>x.address);
-    await Promise.all(this.nodes.map((n,i)=>this.setChaos(i,i===index?{partition:peers}:{partition:[address]})))
-  }
+  async isolate(index:number){const address=this.nodes[index].address;const peers=this.nodes.filter((_,j)=>j!==index).map(x=>x.address);await Promise.all(this.nodes.map((n,i)=>this.setChaos(i,i===index?{partition:peers}:{partition:[address]}))}
   async partitionGroups(groups:number[][]){
     const groupByIndex=new Map<number,number>();
-    for(const [groupIndex,group] of groups.entries())for(const index of group)groupByIndex.set(index,groupIndex);
-    await Promise.all(this.nodes.map((n,i)=>{
-      const group=groupByIndex.get(i);
-      const peers=this.nodes.filter((_,j)=>groupByIndex.get(j)!==group).map(x=>x.address);
-      return this.setChaos(i,{partition:peers});
-    }));
+    for(const[groupIndex,group]of groups.entries())for(const index of group)groupByIndex.set(index,groupIndex);
+    await Promise.all(this.nodes.map((n,i)=>{const group=groupByIndex.get(i);const peers=this.nodes.filter((_,j)=>groupByIndex.get(j)!==group).map(x=>x.address);return this.setChaos(i,{partition:peers})}));
   }
   async heal(){await this.clearChaos()}
   async resources(includeParent=true):Promise<ResourceSnapshot>{
