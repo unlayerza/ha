@@ -28,7 +28,7 @@ export class Election{
   private majority(){const n=this.voters().length;return Math.floor(n/2)+1}
   private isVoter(nodeId:string){return this.voters().includes(nodeId)}
   async restore(term:bigint,votedFor:string|null){this.term=term;this.votedFor=votedFor;this.resetDeadline()}
-  async start(){this.resetDeadline();this.timer=setInterval(()=>void this.tick().catch(()=>{}),Math.max(20,Math.floor(this.heartbeatMs/2)))}
+  async start(){this.resetDeadline();this.timer=setInterval(()=>void this.tick().catch(()=>{}),Math.max(20,Math.floor(this.heartbeatMs/2)));if(this.electionAllowed&&this.isVoter(this.nodeId)&&this.voters().length===1)await this.startElection()}
   async stop(){if(this.timer)clearInterval(this.timer)}
   private async tick(){if(this.role==="leader"){if(this.clock.now()-this.lastHeartbeat>=this.heartbeatMs){this.lastHeartbeat=this.clock.now();await this.broadcastHeartbeat()}return}if(!this.electionAllowed||!this.isVoter(this.nodeId))return;if(this.clock.now()>=this.deadline)await this.startPreVote()}
   private async startPreVote(){if(!this.electionAllowed||!this.isVoter(this.nodeId))return;this.role="candidate";this.preVotes=new Set([this.nodeId]);this.resetDeadline();if(this.preVotes.size>=this.majority()){await this.startElection();return}const req={from:this.nodeId,term:this.term+1n,lastTerm:this.term,lastIndex:0,configurationVersion:this.hooks.configurationVersion()};await this.send("pre_vote_request",req)}
