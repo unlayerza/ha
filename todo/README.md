@@ -14,7 +14,7 @@ Phases are ordered implementation contracts. This roadmap is updated as implemen
 - [x] 07 Fencing — core fencing implemented; adversarial committed-configuration tests remain
 - [x] 08 Lifecycle and drain
 - [x] 09 Local cluster harness — 21-node/22-process campaign validated
-- [ ] 10 Recovery and rejoin — primitives exist; committed configuration and stronger recovery semantics remain
+- [ ] 10 Recovery and rejoin — committed configuration persistence/rejoin path implemented; stronger recovery semantics remain
 - [x] 11 Security and audit — core transport security implemented; authorization hardening remains
 - [x] 12 Observability — core events/metrics/diagnostics implemented
 - [x] 13 Service adapter contract
