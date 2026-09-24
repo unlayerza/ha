@@ -80,8 +80,12 @@ export class LocalProcessCluster{
     if(!r.ok)throw new Error(`HA chaos request failed for node ${index}: HTTP ${r.status}`);
     return r.json()
   }
-  async clearChaos(){await Promise.all(this.nodes.map((_,i)=>this.setChaos(i,{})))}
-  async isolate(index:number){const address=this.nodes[index].address;const peers=this.nodes.filter((_,j)=>j!==index).map(x=>x.address);await Promise.all(this.nodes.map((n,i)=>this.setChaos(i,i===index?{partition:peers}:{partition:[address]}))}
+  async clearChaos(){await Promise.all(this.nodes.map((_,i)=>this.setChaos(i,{}))}
+  async isolate(index:number){
+    const address=this.nodes[index].address;
+    const peers=this.nodes.filter((_,j)=>j!==index).map(x=>x.address);
+    await Promise.all(this.nodes.map((n,i)=>this.setChaos(i,i===index?{partition:peers}:{partition:[address]}));
+  }
   async partitionGroups(groups:number[][]){
     const groupByIndex=new Map<number,number>();
     for(const[groupIndex,group]of groups.entries())for(const index of group)groupByIndex.set(index,groupIndex);
