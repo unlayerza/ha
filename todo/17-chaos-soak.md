@@ -47,3 +47,5 @@
 
 **Process join convergence window:** process-level HA tests now give joining nodes a 15-second protocol convergence window by default, independently of the harness readiness timeout; this avoids treating a valid multi-step configuration transition as a startup failure under concurrent process startup.
 **Process quorum test timeout:** the dedicated 5-node quorum/recovery test now has a 60-second test budget so its assertion window includes the configured 15-second per-process join convergence window and bounded multi-process startup; the HA protocol timeout itself remains unchanged.
+
+**Join diagnostic window:** the process harness now gives joiners a 30-second default protocol convergence window and waits for captured stdout/stderr before reporting a readiness timeout, so a slow join cannot hide the actual configuration/election failure behind the harness timeout.
