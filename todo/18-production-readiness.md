@@ -14,8 +14,8 @@
 - [ ] Service contracts frozen
 
 **Current blockers:**
-- Committed membership/configuration is not implemented.
-- Elections/quorum still need a stable committed voter set.
+- Adversarial committed configuration/fencing behavior is still outstanding.
+- Target-infrastructure 1h/24h/72h evidence is outstanding.
 - Adversarial configuration-change/fencing tests are outstanding.
 - Target-infrastructure 1h/24h/72h evidence is outstanding.
 - External Database/Identity/Voice consumer integration is outstanding.
