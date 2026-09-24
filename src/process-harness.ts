@@ -2,7 +2,14 @@ import {mkdir,rm} from "node:fs/promises";
 import {resourceSnapshot,type ResourceSnapshot} from "./resources";
 import type {ChaosPolicy} from "./types";
 
-export interface ProcessNode{index:number;address:string;api:number;dataDir:string;process?:Bun.Subprocess;stderr?:string;stdout?:string;stderrDone?:Promise<void>;stdoutDone?:Promise<void>}
+export interface ProcessNode{index:number;address:string;api:number;dataDir:string;process?:Bun.Subprocess;startedAt?:number;stderr?:string;stdout?:string;stderrDone?:Promise<void>;stdoutDone?:Promise<void>}
+
+export function classifyProcessError(error:unknown){
+  const message=String(error).toLowerCase();
+  if(message.includes("unable to connect")||message.includes("connection refused")||message.includes("econnrefused"))return "connect-error";
+  if(message.includes("timed out")||message.includes("timeout"))return "request-timeout";
+  return "other";
+}
 
 export class LocalProcessCluster{
   readonly nodes:ProcessNode[]=[];
@@ -15,7 +22,7 @@ export class LocalProcessCluster{
   async startNode(n:ProcessNode){
     if(n.process&&n.process.exitCode===null)return n;
     await mkdir(n.dataDir,{recursive:true});
-    n.stderr="";n.stdout="";n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.peers(),HA_BOOTSTRAP:n.index===0?"true":"false",HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000"},stdout:"pipe",stderr:"pipe"});
+    n.stderr="";n.stdout="";n.startedAt=Date.now();n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.peers(),HA_BOOTSTRAP:n.index===0?"true":"false",HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000"},stdout:"pipe",stderr:"pipe"});
     n.stdoutDone=this.capture(n.process.stdout,s=>n.stdout=s);n.stderrDone=this.capture(n.process.stderr,s=>n.stderr=s);
     await this.waitReady(n,5000);
     return n
@@ -43,7 +50,7 @@ export class LocalProcessCluster{
       while(p.exitCode===null&&Date.now()<deadline)await Bun.sleep(25);
       if(p.exitCode===null)p.kill("SIGKILL");
       await p.exited;
-      n.process=undefined;
+      n.process=undefined;n.startedAt=undefined;
     }));
   }
   async hardKill(index:number){
@@ -52,7 +59,7 @@ export class LocalProcessCluster{
     if(!p)return;
     p.kill("SIGKILL");
     await p.exited;
-    n.process=undefined;
+    n.process=undefined;n.startedAt=undefined;
   }
   async restart(index:number){await this.stop(index);return this.startNode(this.nodes[index])}
   async state(index:number){
