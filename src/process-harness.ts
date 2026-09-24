@@ -13,6 +13,7 @@ export class LocalProcessCluster{
   private peers(){return this.nodes.map(n=>n.address).join(",")}
   async start(){await rm(this.root,{recursive:true,force:true});await mkdir(this.root,{recursive:true});if(this.nodes.length){await this.startNode(this.nodes[0]);await Promise.all(this.nodes.slice(1).map(n=>this.startNode(n)))}return this}
   async startNode(n:ProcessNode){
+    if(n.process&&n.process.exitCode===null)return n;
     await mkdir(n.dataDir,{recursive:true});
     n.stderr="";n.stdout="";n.process=Bun.spawn(["bun","run","src/server.ts"],{env:{...Bun.env,HA_SERVICE:"process-test",HA_CLUSTER:"process-test",HA_ADDRESS:n.address.replace("http://",""),HA_API_PORT:String(n.api),HA_DATA_DIR:n.dataDir,HA_SECRET:this.secret,HA_SEEDS:this.seeds(),HA_PEERS:this.peers(),HA_BOOTSTRAP:n.index===0?"true":"false",HA_HEARTBEAT_MS:Bun.env.HA_PROCESS_HEARTBEAT_MS||"200",HA_ELECTION_MIN_MS:Bun.env.HA_PROCESS_ELECTION_MIN_MS||"1200",HA_ELECTION_MAX_MS:Bun.env.HA_PROCESS_ELECTION_MAX_MS||"3000"},stdout:"pipe",stderr:"pipe"});
     n.stdoutDone=this.capture(n.process.stdout,s=>n.stdout=s);n.stderrDone=this.capture(n.process.stderr,s=>n.stderr=s);
@@ -34,17 +35,28 @@ export class LocalProcessCluster{
   }
   async stop(index?:number){
     const targets=index===undefined?this.nodes:this.nodes.filter(n=>n.index===index);
-    for(const n of targets){n.process?.kill("SIGTERM");await n.process?.exited;n.process=undefined}
+    await Promise.all(targets.map(async n=>{
+      const p=n.process;
+      if(!p)return;
+      p.kill("SIGTERM");
+      const deadline=Date.now()+1500;
+      while(p.exitCode===null&&Date.now()<deadline)await Bun.sleep(25);
+      if(p.exitCode===null)p.kill("SIGKILL");
+      await p.exited;
+      n.process=undefined;
+    }));
   }
   async hardKill(index:number){
     const n=this.nodes[index];
-    n.process?.kill("SIGKILL");
-    await n.process?.exited;
-    n.process=undefined
+    const p=n.process;
+    if(!p)return;
+    p.kill("SIGKILL");
+    await p.exited;
+    n.process=undefined;
   }
   async restart(index:number){await this.stop(index);return this.startNode(this.nodes[index])}
   async state(index:number){
-    const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/state`,{signal:AbortSignal.timeout(500)});
+    const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/state`,{signal:AbortSignal.timeout(1500)});
     if(!r.ok)throw new Error(`HA state request failed: HTTP ${r.status}`);
     return r.json()
   }
