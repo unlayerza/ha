@@ -61,3 +61,5 @@
 **Forwarded-join address fix:** when a seed forwards a join request to the leader, the transport envelope's fromAddress belongs to the forwarding seed. Join configuration delivery now targets the joining member's advertised address instead, preventing configuration snapshots/proposals/commits from being sent back to the seed.
 
 **Configuration-term ordering fix:** configuration messages are handled before the normal election receiver, so a joining node could validate a leader's proposal against an older local term. Configuration snapshots, proposals, acknowledgements, and commits now advance the local election term before their configuration validation.
+
+**Process bootstrap serialization:** the local process harness now starts non-bootstrap nodes one at a time by default. Concurrent startup remains available through `HA_PROCESS_START_CONCURRENCY`; this keeps the quorum recovery gate focused on the HA failure/recovery scenario rather than concurrent initial admission, which will be covered separately as adversarial join churn.
