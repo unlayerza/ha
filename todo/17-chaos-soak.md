@@ -24,3 +24,4 @@
 **Next validation added:** a 5-node process-level quorum-loss/recovery test partitions a 2-node minority from a 3-node majority, verifies minority fencing/quorum loss, verifies a single authoritative majority leader, then heals and verifies convergence. The checkbox remains open until this test is executed successfully.
 
 **Important:** transport chaos still uses non-seeded randomness, so the entire campaign is not yet perfectly reproducible.
+**Join convergence hardening:** concurrent process joins are now serialized at the leader so a single in-flight configuration transition cannot strand admitted nodes outside the committed voter set.
