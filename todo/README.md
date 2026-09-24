@@ -10,7 +10,7 @@ Phases are ordered implementation contracts. This roadmap is updated as implemen
 - [x] 03 Health and readiness
 - [x] 04 Terms and authority
 - [x] 05 Election — multi-process chaos validated; elections now bind to committed configuration versions and voter sets
-- [ ] 06 Quorum — primitives implemented; committed voter-set semantics remain
+- [ ] 06 Quorum — committed voter-set semantics implemented; minority/adversarial transition tests remain
 - [x] 07 Fencing — core fencing implemented; adversarial committed-configuration tests remain
 - [x] 08 Lifecycle and drain
 - [x] 09 Local cluster harness — 21-node/22-process campaign validated
