@@ -17,6 +17,6 @@
 - [ ] 24-hour soak
 - [ ] 72-hour soak
 
-**Validated evidence:** 21-node / 36-second campaign, 22 observed processes, 84/84 invariant checks passed, 0 unexpected failures.
+**Validated evidence:** 21-node / 15-minute campaigns on both Alpha and the development machine passed 3,330/3,330 and 2,880/2,880 invariant checks respectively, with 0 action errors and 0 unexpected failures.
 
 **Important:** transport chaos still uses non-seeded randomness, so the entire campaign is not yet perfectly reproducible.
