@@ -155,7 +155,7 @@ export class ConfigurationManager {
     if(proposal.nextVersion<=this.current.version)return this.snapshot();
     if(sourceId!==proposal.proposer)throw new HAError("Configuration commit source does not match proposer","CONFIG_AUTHORITY_REQUIRED");
     if(proposal.baseVersion!==this.current.version)throw new HAError("Configuration commit skipped a version","STALE_CONFIGURATION");
-    if(!this.current.voters.includes(proposal.proposer))throw new HAError("Configuration proposer is not a committed voter","CONFIG_AUTHORITY_REQUIRED");
+    if(!this.current.voters.includes(proposal.proposer)&&!(this.current.voters.length===0&&proposal.baseVersion===0n&&proposal.nextVersion===1n&&proposal.voters.includes(proposal.proposer)))throw new HAError("Configuration proposer is not a committed voter","CONFIG_AUTHORITY_REQUIRED");
     const voters=uniqueSorted(proposal.voters);
     if(!this.transitionIsSafe(voters))throw new HAError("Configuration commit does not preserve quorum intersection","UNSAFE_CONFIGURATION_TRANSITION");
     const acknowledgements=new Set(proposal.acknowledgements||[]);
