@@ -145,6 +145,13 @@ try{
     }
   }
 
+  await cluster.heal();
+  const settleMs=Math.max(1500,Number(Bun.env.HA_SOAK_SETTLE_MS||3000));
+  await Bun.sleep(settleMs);
+  const finalHealth=await Promise.all(cluster.nodes.map((_,i)=>cluster.diagnose(i)));
+  const finalReady=finalHealth.every(h=>h.status==="ready");
+  const finalFailures=finalHealth.filter(h=>h.status!=="ready").map(h=>"node-"+h.index+":"+h.status+(h.error?":"+h.error:"")).join(";");
+  chaos.recordInvariant("final-cluster-recovered",finalReady,finalFailures);
   await recordResources();
   const campaign=chaos.finish();
   const result={
