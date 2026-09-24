@@ -59,3 +59,5 @@
 **Join routing hardening:** seed nodes that are no longer leader now forward join requests to the currently known leader instead of rejecting them. This keeps bootstrap/join traffic functional across leader changes while preserving configuration authority at the leader.
 
 **Forwarded-join address fix:** when a seed forwards a join request to the leader, the transport envelope's fromAddress belongs to the forwarding seed. Join configuration delivery now targets the joining member's advertised address instead, preventing configuration snapshots/proposals/commits from being sent back to the seed.
+
+**Configuration-term ordering fix:** configuration messages are handled before the normal election receiver, so a joining node could validate a leader's proposal against an older local term. Configuration snapshots, proposals, acknowledgements, and commits now advance the local election term before their configuration validation.
