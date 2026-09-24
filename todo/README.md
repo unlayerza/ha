@@ -6,7 +6,7 @@ Phases are ordered implementation contracts. This roadmap is updated as implemen
 
 - [x] 00 Project foundation
 - [x] 01 Node identity — core identity implemented; region/zone and software/protocol metadata remain
-- [x] 02 Membership — core membership and convergence validated; quorum-committed configuration remains
+- [x] 02 Membership — core membership and convergence validated; committed configuration transitions implemented; concurrent churn remains
 - [x] 03 Health and readiness
 - [x] 04 Terms and authority
 - [x] 05 Election — multi-process chaos validated; stable committed voter configuration remains
