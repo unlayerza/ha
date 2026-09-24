@@ -94,7 +94,8 @@ export class LocalProcessCluster{
   async clearChaos(){await Promise.all(this.nodes.map((_,i)=>this.setChaos(i,{})))}
   async isolate(index:number){
     const address=this.nodes[index].address;
-    await Promise.all(this.nodes.map((n,i)=>this.setChaos(i,i===index?{partition:this.nodes.filter((_,j)=>j!==index).map(x=>x.address)}:{partition:[address]}))
+    const peers=this.nodes.filter((_,j)=>j!==index).map(x=>x.address);
+    await Promise.all(this.nodes.map((n,i)=>this.setChaos(i,i===index?{partition:peers}:{partition:[address]})))
   }
   async heal(){await this.clearChaos()}
   async resources(includeParent=true):Promise<ResourceSnapshot>{
