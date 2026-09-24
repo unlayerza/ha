@@ -34,6 +34,7 @@ console.log(`HA soak cluster ready: ${nodeCount} HA processes + 1 soak superviso
 const started=Date.now();
 const end=started+duration;
 let iterations=0;
+let actionErrors=0;
 
 try{
   resourceTimer=setInterval(()=>void recordResources(),5000);
@@ -50,6 +51,7 @@ try{
     ]);
     iterations++;
 
+    try{
     if(action.type==="kill"){
       const i=Number(action.node);
       await cluster.hardKill(i);
@@ -86,6 +88,13 @@ try{
       await Bun.sleep(400);
     }
 
+    }catch(error){
+      actionErrors++;
+      console.warn("HA soak action failed:",String(error));
+      await cluster.heal().catch(()=>{});
+      await Bun.sleep(250);
+    }
+
     const checks=await Promise.all(cluster.nodes.map(async(_,i)=>{
       try{
         const state=await cluster.state(i) as any;
@@ -109,6 +118,10 @@ try{
     const minTerm=terms.length?terms.reduce((a,b)=>a<b?a:b):0n;
     const maxTerm=terms.length?terms.reduce((a,b)=>a>b?a:b):0n;
     chaos.recordInvariant("terms-converged",maxTerm-minTerm<=1n,`min=${minTerm} max=${maxTerm}`);
+    const configurationVersions=reachable.map(c=>BigInt(c.state.configurationVersion||"0"));
+    const minConfiguration=configurationVersions.length?configurationVersions.reduce((a,b)=>a<b?a:b):0n;
+    const maxConfiguration=configurationVersions.length?configurationVersions.reduce((a,b)=>a>b?a:b):0n;
+    chaos.recordInvariant("configuration-converged",maxConfiguration===minConfiguration,`min=${minConfiguration} max=${maxConfiguration}`);
 
     if(iterations%10===0){
       await recordResources();
@@ -124,6 +137,7 @@ try{
     ...campaign,
     durationMs:(campaign.finishedAt||Date.now())-campaign.startedAt,
     iterations,
+    actionErrors,
     expectedProcessCount:nodeCount+1,
     resources:{
       supported:resourceSamples.some(s=>s.supported),
