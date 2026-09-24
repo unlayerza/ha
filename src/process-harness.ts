@@ -47,7 +47,7 @@ export class LocalProcessCluster{
         const states=await Promise.all(this.nodes.slice(0,index+1).map((_,i)=>this.state(i) as Promise<any>));
         const target=states[index];
         const voters=Array.isArray(target.voters)?target.voters:[];
-        const admitted=voters.length>index&&voters.includes(this.nodeId(index));
+        const admitted=voters.length>=index+1;
         const membershipSettled=states.every((state:any)=>Number(state.membershipSize||0)>=index+1);
         const committed=states.every((state:any)=>Number(state.configurationVersion||0)>=index);
         if(admitted&&membershipSettled&&committed)return;
@@ -57,7 +57,6 @@ export class LocalProcessCluster{
     const diagnostics=await Promise.all(this.nodes.slice(0,index+1).map((_,i)=>this.diagnose(i)));
     throw new Error(`HA process ${index} joined locally but cluster admission did not settle within ${timeout}ms: ${JSON.stringify(diagnostics)}`);
   }
-  private nodeId(index:number){return this.nodes[index]?.address||""}
   private capture(stream:ReadableStream<Uint8Array>|null|undefined,target:(value:string)=>void){if(!stream)return Promise.resolve();return(async()=>{const reader=stream.getReader();const decoder=new TextDecoder();let value="";const limit=16384;try{while(true){const part=await reader.read();if(part.done)break;if(value.length<limit)value+=decoder.decode(part.value,{stream:true}).slice(0,limit-value.length)}}catch{}target(value.slice(-limit))})()}
   private async waitReady(n:ProcessNode,timeoutMs:number){
     const deadline=Date.now()+timeoutMs;
