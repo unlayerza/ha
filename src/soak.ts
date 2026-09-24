@@ -7,6 +7,7 @@ const duration=Number(Bun.env.HA_SOAK_MS||(hours?hours*3600000:3600000));
 const seed=Number(Bun.env.CHAOS_SEED||12345);
 const nodeCount=Number(Bun.env.HA_SOAK_NODES||3);
 const chaos=new ChaosController(seed);
+const compact=Bun.env.HA_SOAK_COMPACT==="1";
 const cluster=new LocalProcessCluster(nodeCount);
 const resourceSamples:ResourceSnapshot[]=[];
 let resourceBusy=false;
@@ -26,10 +27,10 @@ const recordResources=async()=>{
 
 const randomNode=()=>chaos.random.int(cluster.nodes.length);
 
-console.log(`HA soak starting: nodes=${nodeCount} duration=${duration}ms seed=${seed} processes=${nodeCount+1}`);
+if(!compact)console.log(`HA soak starting: nodes=${nodeCount} duration=${duration}ms seed=${seed} processes=${nodeCount+1}`);
 await cluster.start();
 await recordResources();
-console.log(`HA soak cluster ready: ${nodeCount} HA processes + 1 soak supervisor`);
+if(!compact)console.log(`HA soak cluster ready: ${nodeCount} HA processes + 1 soak supervisor`);
 
 const started=Date.now();
 const end=started+duration;
@@ -123,7 +124,7 @@ try{
     const maxConfiguration=configurationVersions.length?configurationVersions.reduce((a,b)=>a>b?a:b):0n;
     chaos.recordInvariant("configuration-converged",maxConfiguration===minConfiguration,`min=${minConfiguration} max=${maxConfiguration}`);
 
-    if(iterations%10===0){
+    if(!compact&&iterations%10===0){
       await recordResources();
       const elapsed=((Date.now()-started)/1000).toFixed(1);
       const current=resourceSamples.at(-1);
@@ -133,27 +134,30 @@ try{
 
   await recordResources();
   const campaign=chaos.finish();
-  console.log(JSON.stringify({
-    ...campaign,
+  const result={
+    seed,
+    nodes:nodeCount,
     durationMs:(campaign.finishedAt||Date.now())-campaign.startedAt,
     iterations,
     actionErrors,
+    actionCounts:campaign.actionCounts,
+    invariantStats:campaign.invariantStats,
+    failures:campaign.failures,
+    unexpectedFailures:campaign.unexpectedFailures,
     expectedProcessCount:nodeCount+1,
     resources:{
       supported:resourceSamples.some(s=>s.supported),
       samples:resourceSamples.length,
       peak:peak?{
-        at:peak.at,
         processes:peak.processes.length,
         totalRssBytes:peak.totalRssBytes,
-        totalVszBytes:peak.totalVszBytes,
-        cpuPercent:peak.cpuPercent,
-        load1:peak.load1,
+        cpuPercent:Number(peak.cpuPercent.toFixed(1)),
+        load1:Number(peak.load1.toFixed(2)),
         memoryAvailableBytes:peak.memoryAvailableBytes,
       }:null,
-      last:resourceSamples.at(-1)||null,
     },
-  },null,2));
+  };
+  if(compact)console.log(JSON.stringify(result));else console.log(JSON.stringify({...campaign,...result},null,2));;
 }finally{
   if(resourceTimer)clearInterval(resourceTimer);
   await cluster.cleanup();
