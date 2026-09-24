@@ -78,7 +78,7 @@ export class SignedTransport implements Transport{
   constructor(private inner:Transport,private address:string,private secret:string){}
   async start(h:(m:ClusterMessage)=>Promise<void>){return this.inner.start?.(h)}
   async stop(){return this.inner.stop?.()}
-  private async secure(m:ClusterMessage){const x={...m,fromAddress:m.fromAddress||this.address};return{...x,signature:await sign(this.secret,canonicalMessage(x.id,x.kind,x.from,x.term,x.sentAt,x.payload))}}
+  private async secure(m:ClusterMessage){const x={...m,fromAddress:m.fromAddress||this.address};return{...x,signature:await sign(this.secret,canonicalMessage(x.id,x.kind,x.from,x.term,x.sentAt,x.payload,x.configurationVersion))}}
   async send(to:string,m:ClusterMessage){await this.inner.send(to,await this.secure(m))}
   async broadcast(_from:string,m:ClusterMessage){await this.inner.broadcast(this.address,await this.secure(m))}
 }
