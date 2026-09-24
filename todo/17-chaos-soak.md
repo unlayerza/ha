@@ -26,3 +26,4 @@
 **Important:** transport chaos still uses non-seeded randomness, so the entire campaign is not yet perfectly reproducible.
 **Join convergence hardening:** concurrent process joins are now serialized at the leader so a single in-flight configuration transition cannot strand admitted nodes outside the committed voter set.
 **Configuration join race:** configuration proposals are now authorized by the committed voter set and current term rather than requiring prior heartbeat-based leader discovery, allowing a joiner to acknowledge the leader's proposal immediately after admission.
+**Join protocol ordering:** election term/vote state is now restored before the transport is exposed to join traffic, so configuration proposals received during bootstrap/join validation use the persisted current term rather than the initial zero term.
