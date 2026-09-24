@@ -139,6 +139,8 @@ Requirements:
 
 The exact consensus protocol is an implementation decision and must be validated with failure-injection tests before production use.
 
+**Current implementation note:** leader election and quorum primitives exist and pass the current multi-process chaos campaign, but membership authority is still gossip/merge based. A committed membership/configuration layer is required before quorum/election/fencing can be treated as having the full production correctness contract.
+
 ## 9. Quorum
 
 HA supports configurable quorum policies.
@@ -369,7 +371,7 @@ Metrics:
 - stale-node rejections
 - recovery duration
 
-## 20. Development Order
+## 22. Development Order
 
 1. Foundation
 2. Node identity
@@ -392,7 +394,24 @@ Metrics:
 19. Long-running chaos/soak
 20. Production hardening
 
-## 21. Definition of Done
+## 21. Current Verified State
+
+As of 2026-09-24:
+
+- 21-node multi-process chaos campaign completed successfully.
+- 22 processes were observed by the resource instrumentation.
+- 84/84 invariant checks passed.
+- No unexpected failures occurred.
+- Membership convergence passed throughout the campaign.
+- No split-brain was observed.
+- Terms remained converged.
+- The campaign included kills, partitions, drops, duplicates, reordering, delay and healing.
+
+This validates the current cluster foundation. It does **not** yet constitute production readiness.
+
+The next major correctness milestone is **committed membership/configuration**: configuration proposals, quorum acknowledgement, committed configuration versions, stable voter sets, persistence/recovery of committed configuration, and adversarial tests against obsolete configurations.
+
+## 22. Development Order
 
 HA is ready for service consumption when:
 - a 3-node cluster can elect authority;
