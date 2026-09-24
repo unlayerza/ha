@@ -14,7 +14,7 @@ describe("process quorum recovery",()=>{
         await Bun.sleep(200);
       }
       if(initial.filter(s=>s.role==="leader").length!==1||!initial.every(s=>s.quorum===true)){
-        const diagnostics=await Promise.all(cluster.nodes.map((_,i)=>cluster.diagnose(i)));const compact=initial.map((s,i)=>({index:i,role:s.role,term:s.term,quorum:s.quorum,membershipSize:s.membershipSize,votingSize:s.votingSize,configurationVersion:s.configurationVersion,voters:s.voters,membershipReady:s.membershipReady,configurationEvents:(s.events||[]).filter((e:any)=>e.type.startsWith("configuration_")||e.type==="join_received"||e.type==="security_reject")}));
+        const diagnostics=await Promise.all(cluster.nodes.map((_,i)=>cluster.diagnose(i)));const compact=initial.map((s,i)=>({index:i,role:s.role,term:s.term,quorum:s.quorum,membershipSize:s.membershipSize,votingSize:s.votingSize,configurationVersion:s.configurationVersion,voters:s.voters,membershipReady:s.membershipReady,configurationEvents:(s.events||[]).filter((e:any)=>e.type.startsWith("configuration_")||e.type==="join_received"||e.type==="join_request_received"||e.type==="join_rejected"||e.type==="security_reject")}));
         throw new Error(`initial cluster convergence failed: ${JSON.stringify({states:compact,diagnostics})}`);
       }
 
