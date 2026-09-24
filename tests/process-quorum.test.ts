@@ -13,11 +13,10 @@ describe("process quorum recovery",()=>{
         if(initial.filter(s=>s.role==="leader").length===1&&initial.every(s=>s.quorum===true))break;
         await Bun.sleep(200);
       }
-      if(initial.filter(s=>s.role==="leader").length!==1){
+      if(initial.filter(s=>s.role==="leader").length!==1||!initial.every(s=>s.quorum===true)){
         const diagnostics=await Promise.all(cluster.nodes.map((_,i)=>cluster.diagnose(i)));
-        throw new Error(`initial election failed: ${JSON.stringify({states:initial,diagnostics})}`);
+        throw new Error(`initial cluster convergence failed: ${JSON.stringify({states:initial,diagnostics})}`);
       }
-      expect(initial.every(s=>s.quorum===true)).toBe(true);
 
       await cluster.partitionGroups([[0,1],[2,3,4]]);
       await Bun.sleep(1800);
