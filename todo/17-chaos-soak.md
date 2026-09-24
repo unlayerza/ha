@@ -39,3 +39,5 @@
 **Join startup correctness:** non-bootstrap processes now fail startup unless both membership synchronization and committed voter configuration converge before the join deadline; this prevents a node from becoming ready but permanently ineligible for election after an unsuccessful join.
 
 **Single-voter bootstrap:** election startup now immediately establishes the sole committed voter as leader instead of waiting for the election timeout; this removes a bootstrap/join race where joiners could repeatedly reach a healthy but not-yet-authoritative seed.
+
+**Join authority diagnostics:** configuration proposals now record the exact election, authority, quorum, term, and committed-configuration state when a leader cannot authorize a join transition, plus successful proposal initiation metadata.
