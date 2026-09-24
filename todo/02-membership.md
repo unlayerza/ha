@@ -13,4 +13,4 @@
 - [x] Stale membership rejection
 - [x] Three-node integration tests
 
-**Status:** VALIDATED at multi-process scale. Membership admission now drives a persisted, quorum-committed voter configuration. **Remaining:** concurrent membership churn and adversarial transition testing.
+**Status:** VALIDATED at multi-process scale. Membership admission now drives a persisted, quorum-committed voter configuration. **Remaining:** concurrent membership churn and full adversarial membership/configuration-transition execution.
