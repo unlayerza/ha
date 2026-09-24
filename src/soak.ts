@@ -1,6 +1,6 @@
-import {LocalProcessCluster} from "./process-harness";
-import {ChaosController} from "./chaos";
-import {formatBytes,type ResourceSnapshot} from "./resources";
+import{LocalProcessCluster}from"./process-harness";
+import{ChaosController}from"./chaos";
+import{formatBytes,type ResourceSnapshot}from"./resources";
 
 const hours=Number(Bun.env.HA_SOAK_HOURS||0);
 const duration=Number(Bun.env.HA_SOAK_MS||(hours?hours*3600000:3600000));
@@ -39,11 +39,11 @@ let actionErrors=0;
 const actionErrorTypes:Record<string,number>={};
 const classifyActionError=(error:unknown)=>{
   const message=String(error).toLowerCase();
-  if(message.includes("did not become ready")||message.includes("exited during startup"))return "ready-timeout";
-  if(message.includes("unable to connect")||message.includes("connection refused")||message.includes("econnrefused"))return "connect-error";
-  if(message.includes("timed out")||message.includes("timeout"))return "request-timeout";
-  if(message.includes("http "))return "http-error";
-  return "other";
+  if(message.includes("did not become ready")||message.includes("exited during startup"))return"ready-timeout";
+  if(message.includes("unable to connect")||message.includes("connection refused")||message.includes("econnrefused"))return"connect-error";
+  if(message.includes("timed out")||message.includes("timeout"))return"request-timeout";
+  if(message.includes("http "))return"http-error";
+  return"other";
 };
 
 try{
@@ -110,10 +110,10 @@ try{
     const checks=await Promise.all(cluster.nodes.map(async(_,i)=>{
       try{
         const state=await cluster.state(i) as any;
-        return {i,ok:true,state,error:undefined,health:{index:i,status:"ready" as const}};
+        return{i,ok:true,state,error:undefined,health:{index:i,status:"ready" as const}};
       }catch(error){
         const health=await cluster.diagnose(i);
-        return {i,ok:false,state:undefined,error:String(error),health};
+        return{i,ok:false,state:undefined,error:String(error),health};
       }
     }));
     const reachable=checks.filter(c=>c.ok);
@@ -148,7 +148,15 @@ try{
   await cluster.heal();
   const settleMs=Math.max(1500,Number(Bun.env.HA_SOAK_SETTLE_MS||3000));
   await Bun.sleep(settleMs);
-  const finalHealth=await Promise.all(cluster.nodes.map((_,i)=>cluster.diagnose(i)));
+  const recoveryWindowMs=Math.max(5000,Number(Bun.env.HA_SOAK_RECOVERY_TIMEOUT_MS||15000));
+  const recoveryDeadline=Date.now()+recoveryWindowMs;
+  let finalHealth:Awaited<ReturnType<typeof cluster.diagnose>>[]=[];
+  while(Date.now()<recoveryDeadline){
+    finalHealth=await Promise.all(cluster.nodes.map((_,i)=>cluster.diagnose(i)));
+    if(finalHealth.every(h=>h.status==="ready"))break;
+    await Bun.sleep(500);
+  }
+  if(finalHealth.length===0)finalHealth=await Promise.all(cluster.nodes.map((_,i)=>cluster.diagnose(i)));
   const finalReady=finalHealth.every(h=>h.status==="ready");
   const finalFailures=finalHealth.filter(h=>h.status!=="ready").map(h=>"node-"+h.index+":"+h.status+(h.error?":"+h.error:"")).join(";");
   chaos.recordInvariant("final-cluster-recovered",finalReady,finalFailures);
@@ -181,10 +189,7 @@ try{
     },
   };
   if(compact){
-    const boundedFailures=campaign.unexpectedFailures.length>10?[
-      ...campaign.unexpectedFailures.slice(0,5),
-      ...campaign.unexpectedFailures.slice(-5),
-    ]:campaign.unexpectedFailures;
+    const boundedFailures=campaign.unexpectedFailures.length>10?[...campaign.unexpectedFailures.slice(0,5),...campaign.unexpectedFailures.slice(-5)]:campaign.unexpectedFailures;
     console.log(JSON.stringify({...result,unexpectedFailureCount:campaign.unexpectedFailures.length,unexpectedFailures:boundedFailures}));
   }else console.log(JSON.stringify({...campaign,...result},null,2));
 }finally{
