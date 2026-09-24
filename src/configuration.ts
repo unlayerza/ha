@@ -80,7 +80,7 @@ export class ConfigurationManager {
   accept(proposal:ConfigurationProposal){
     if(proposal.baseVersion!==this.current.version)throw new HAError("Stale configuration proposal","STALE_CONFIGURATION");
     if(proposal.nextVersion!==this.current.version+1n)throw new HAError("Invalid configuration version","INVALID_CONFIGURATION");
-    if(!this.current.voters.includes(proposal.proposer)&&!proposal.voters.includes(proposal.proposer))throw new HAError("Unauthorized configuration proposer","CONFIG_AUTHORITY_REQUIRED");
+    if(!this.current.voters.includes(proposal.proposer))throw new HAError("Unauthorized configuration proposer","CONFIG_AUTHORITY_REQUIRED");
     const voters=uniqueSorted(proposal.voters);
     if(!voters.length||voters.length!==proposal.voters.length)throw new HAError("Invalid configuration voters","INVALID_CONFIGURATION");
     if(this.pending&&this.pending.id!==proposal.id)throw new HAError("Conflicting configuration change","CONFIG_CHANGE_CONFLICT");
@@ -136,7 +136,7 @@ export class ConfigurationManager {
   async installCommitted(proposal:ConfigurationProposal){
     if(proposal.nextVersion<=this.current.version)return this.snapshot();
     if(proposal.baseVersion!==this.current.version)throw new HAError("Configuration commit skipped a version","STALE_CONFIGURATION");
-    if(!this.current.voters.includes(proposal.proposer)&&!proposal.voters.includes(proposal.proposer))throw new HAError("Configuration proposer is not authorized by the transition","CONFIG_AUTHORITY_REQUIRED");
+    if(!this.current.voters.includes(proposal.proposer))throw new HAError("Configuration proposer is not a committed voter","CONFIG_AUTHORITY_REQUIRED");
     const acknowledgements=new Set(proposal.acknowledgements||[]);
     const currentAcks=this.current.voters.filter(v=>acknowledgements.has(v)).length;
     if(currentAcks<this.majority())throw new HAError("Configuration commit lacks voter quorum","CONFIGURATION_QUORUM_REQUIRED");
