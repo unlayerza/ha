@@ -124,6 +124,10 @@ export class ConfigurationManager {
   async installCommitted(proposal:ConfigurationProposal){
     if(proposal.nextVersion<=this.current.version)return this.snapshot();
     if(proposal.baseVersion!==this.current.version)throw new HAError("Configuration commit skipped a version","STALE_CONFIGURATION");
+    if(!this.current.voters.includes(proposal.proposer))throw new HAError("Configuration proposer is not a committed voter","CONFIG_AUTHORITY_REQUIRED");
+    const acknowledgements=new Set(proposal.acknowledgements||[]);
+    const currentAcks=this.current.voters.filter(v=>acknowledgements.has(v)).length;
+    if(currentAcks<this.majority())throw new HAError("Configuration commit lacks voter quorum","CONFIGURATION_QUORUM_REQUIRED");
     this.current={version:proposal.nextVersion,voters:uniqueSorted(proposal.voters),committedAt:this.clock.now()};
     this.pending=null;
     await this.persist();
