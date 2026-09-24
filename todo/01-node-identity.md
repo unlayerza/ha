@@ -1,14 +1,16 @@
 # Phase 01 — Node Identity
 
-- [ ] Node ID format
-- [ ] Service ID
-- [ ] Cluster ID
-- [ ] Durable identity persistence
-- [ ] Address registration
+- [x] Node ID format
+- [x] Service ID
+- [x] Cluster ID
+- [x] Durable identity persistence
+- [x] Address registration
 - [ ] Region/zone metadata
 - [ ] Software/protocol version
-- [ ] Node credential
-- [ ] Credential rotation
-- [ ] Identity collision tests
-- [ ] Restart identity persistence
-- [ ] Spoofed node rejection
+- [x] Node credential
+- [x] Credential rotation
+- [x] Identity collision tests
+- [x] Restart identity persistence
+- [x] Spoofed node rejection
+
+**Status:** CORE COMPLETE. Region/zone and software/protocol metadata are not yet represented in the current node identity model.
