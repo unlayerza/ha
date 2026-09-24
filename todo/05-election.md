@@ -13,4 +13,4 @@
 - [x] Repeated leader failure tests
 - [x] Deterministic election tests
 
-**Status:** VALIDATED by the multi-process chaos campaign. Elections now use the persisted committed voter set and reject stale configuration versions. **Remaining:** adversarial election/configuration-transition tests.
+**Status:** VALIDATED by the multi-process chaos campaign. Elections now use the persisted committed voter set and reject stale configuration versions. **Remaining:** execute the adversarial election/configuration-transition suite.
