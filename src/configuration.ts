@@ -120,4 +120,14 @@ export class ConfigurationManager {
   assertVersion(version:bigint){
     if(version!==this.current.version)throw new HAError("Stale configuration version","STALE_CONFIGURATION");
   }
+
+  async installCommitted(proposal:ConfigurationProposal){
+    if(proposal.nextVersion<=this.current.version)return this.snapshot();
+    if(proposal.baseVersion!==this.current.version)throw new HAError("Configuration commit skipped a version","STALE_CONFIGURATION");
+    this.current={version:proposal.nextVersion,voters:uniqueSorted(proposal.voters),committedAt:this.clock.now()};
+    this.pending=null;
+    await this.persist();
+    this.emit("configuration_committed",{id:proposal.id,version:this.current.version.toString(),voters:this.current.voters});
+    return this.snapshot();
+  }
 }
