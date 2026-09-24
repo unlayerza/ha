@@ -35,3 +35,5 @@
 
 
 **Process join routing:** process-harness seed addresses preserve the HTTP scheme so non-bootstrap nodes can actually reach the bootstrap leader during join.
+
+**Join startup correctness:** non-bootstrap processes now fail startup unless both membership synchronization and committed voter configuration converge before the join deadline; this prevents a node from becoming ready but permanently ineligible for election after an unsuccessful join.
