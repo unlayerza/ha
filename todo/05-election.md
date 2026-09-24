@@ -13,4 +13,4 @@
 - [x] Repeated leader failure tests
 - [x] Deterministic election tests
 
-**Status:** VALIDATED by the multi-process chaos campaign. **Production gap:** election voters currently derive from mutable membership; they must use a committed configuration.
+**Status:** VALIDATED by the multi-process chaos campaign. Elections now use the persisted committed voter set and reject stale configuration versions. **Remaining:** adversarial election/configuration-transition tests.
