@@ -11,4 +11,4 @@
 - [x] Fence audit events
 - [x] Fencing invariant tests
 
-**Status:** CORE COMPLETE. Adversarial tests against obsolete committed configurations remain.
+**Status:** CORE COMPLETE. Adversarial tests for obsolete committed configurations and self-removal authority are now present. **Remaining:** execute the adversarial suite and production runbook validation.
