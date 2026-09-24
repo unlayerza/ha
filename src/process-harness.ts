@@ -97,6 +97,15 @@ export class LocalProcessCluster{
     const peers=this.nodes.filter((_,j)=>j!==index).map(x=>x.address);
     await Promise.all(this.nodes.map((n,i)=>this.setChaos(i,i===index?{partition:peers}:{partition:[address]})))
   }
+  async partitionGroups(groups:number[][]){
+    const groupByIndex=new Map<number,number>();
+    for(const [groupIndex,group] of groups.entries())for(const index of group)groupByIndex.set(index,groupIndex);
+    await Promise.all(this.nodes.map((n,i)=>{
+      const group=groupByIndex.get(i);
+      const peers=this.nodes.filter((_,j)=>groupByIndex.get(j)!==group).map(x=>x.address);
+      return this.setChaos(i,{partition:peers});
+    }));
+  }
   async heal(){await this.clearChaos()}
   async resources(includeParent=true):Promise<ResourceSnapshot>{
     const entries=this.nodes.filter(n=>n.process).map(n=>({pid:n.process!.pid,label:`node-${n.index}`}));
