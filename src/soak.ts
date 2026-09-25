@@ -73,7 +73,7 @@ const uniqueNetworkNodes=(actions:ReturnType<typeof chooseAction>)=>{
 };
 
 if(!compact){
-  console.log(`HA soak starting: nodes=${nodeCount} duration=${duration}ms seed=${seed} processes=${nodeCount+1}${profile?\` profile=${profile.name} target=${profile.targetHours}h burst=${burst}\`:""}`);
+  console.log(`HA soak starting: nodes=${nodeCount} duration=${duration}ms seed=${seed} processes=${nodeCount+1}${profile?` profile=${profile.name} target=${profile.targetHours}h burst=${burst}`:""}`);
 }
 await cluster.start();
 await recordResources();
