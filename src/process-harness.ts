@@ -86,13 +86,13 @@ export class LocalProcessCluster{
     const age=n.startedAt?Date.now()-n.startedAt:Infinity;
     try{
       const ready=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(750)});
-      if(!ready.ok){let state:any;try{const response=await fetch(`http://127.0.0.1:${n.api}/state`,{signal:AbortSignal.timeout(1000)});if(response.ok)state=await response.json()}catch{}return{index,status:age<10000?"starting":"unreachable",error:`ready-http-${ready.status}`,state,stdout:n.stdout,stderr:n.stderr};
-    }catch(error){return{index,status:age<10000?"starting":"unreachable",error:classifyProcessError(error),stdout:n.stdout,stderr:n.stderr}}
-    try{
-      const state=await fetch(`http://127.0.0.1:${n.api}/state`,{signal:AbortSignal.timeout(2500)});
-      if(state.ok)return{index,status:"ready",stdout:n.stdout,stderr:n.stderr};
-      return{index,status:"unreachable",error:`state-http-${state.status}`,stdout:n.stdout,stderr:n.stderr};
-    }catch(error){return{index,status:"unreachable",error:classifyProcessError(error),stdout:n.stdout,stderr:n.stderr}}
+      let state:any;
+      try{const response=await fetch(`http://127.0.0.1:${n.api}/state`,{signal:AbortSignal.timeout(1000)});if(response.ok)state=await response.json()}catch{}
+      if(ready.ok)return{index,status:"ready",state,stdout:n.stdout,stderr:n.stderr};
+      return{index,status:age<10000?"starting":"unreachable",error:`ready-http-${ready.status}`,state,stdout:n.stdout,stderr:n.stderr};
+    }catch(error){
+      return{index,status:age<10000?"starting":"unreachable",error:classifyProcessError(error),stdout:n.stdout,stderr:n.stderr};
+    }
   }
   async setChaos(index:number,policy:ChaosPolicy){
     const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/chaos`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({delayMs:policy.delayMs||0,dropRate:policy.dropRate||0,duplicateRate:policy.duplicateRate||0,reorder:!!policy.reorder,partition:[...(policy.partition||[])]}),signal:AbortSignal.timeout(3000)});
