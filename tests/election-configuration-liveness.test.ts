@@ -2,7 +2,6 @@ import{describe,test,expect}from"bun:test";
 import{Election}from"../src/election";
 import{TestClock}from"../src/clock";
 import type{ClusterMessage,Member,Transport}from"../src/types";
-import{StaleTermError}from"../src/errors";
 
 class FakeTransport implements Transport{
   sent:ClusterMessage[]=[];
@@ -41,7 +40,7 @@ describe("election configuration liveness",()=>{
     expect(role).toBe("follower");
   });
 
-  test("still rejects a heartbeat from a future configuration",async()=>{
+  test("accepts a heartbeat from a future configuration while configuration convergence is in flight",async()=>{
     const clock=new TestClock();
     const transport=new FakeTransport();
     const election=new Election("a",transport,clock,100,1000,2000,{
@@ -60,6 +59,7 @@ describe("election configuration liveness",()=>{
       payload:{leaderId:"a",configurationVersion:3n},signature:""
     };
 
-    await expect(election.receive(heartbeat)).rejects.toBeInstanceOf(StaleTermError);
+    await election.receive(heartbeat);
+    expect(election.leaderId).toBe("a");
   });
 });
