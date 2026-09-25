@@ -38,8 +38,8 @@ export class Election{
   async receive(m:ClusterMessage){
     const configVersion=m.configurationVersion;
     const currentConfigurationVersion=this.hooks.configurationVersion();
-    const staleHeartbeat=configVersion!==undefined&&configVersion<currentConfigurationVersion&&m.kind==="heartbeat";
-    if(configVersion!==undefined&&configVersion!==currentConfigurationVersion&&!staleHeartbeat)throw new StaleTermError("stale configuration");
+    const convergenceHeartbeat=configVersion!==undefined&&configVersion!==currentConfigurationVersion&&m.kind==="heartbeat";
+    if(configVersion!==undefined&&configVersion!==currentConfigurationVersion&&!convergenceHeartbeat)throw new StaleTermError("stale configuration");
     if(m.kind==="pre_vote_request")return this.onPreVoteRequest(m);
     if(m.kind==="pre_vote_response")return this.onPreVoteResponse(m);
     if(m.term<this.term)throw new StaleTermError();
