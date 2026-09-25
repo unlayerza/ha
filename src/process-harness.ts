@@ -82,7 +82,7 @@ export class LocalProcessCluster{
     return r.json()
   }
   async diagnose(index:number):Promise<{index:number;status:"ready"|"starting"|"unreachable"|"dead";error?:string;state?:any;stdout?:string;stderr?:string}>{
-    const n=this.nodes[index];const p=n.process;if(!p||p.exitCode!==null)return{index,status:"dead"};
+    const n=this.nodes[index];if(!n)return{index,status:"dead",error:"unknown-process-node"};const p=n.process;if(!p||p.exitCode!==null)return{index,status:n.startedAt?"dead":"starting"};
     const age=n.startedAt?Date.now()-n.startedAt:Infinity;
     try{
       const ready=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(750)});
