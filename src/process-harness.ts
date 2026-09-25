@@ -61,7 +61,7 @@ export class LocalProcessCluster{
   private async waitReady(n:ProcessNode,timeoutMs:number){
     const deadline=Date.now()+timeoutMs;
     while(Date.now()<deadline){
-      if(!n.process||n.process.exitCode!==null){await Promise.allSettled([n.stdoutDone,n.stderrDone]);const survivors=await Promise.all(this.nodes.filter(x=>x.index!==n.index).map(x=>this.diagnose(x.index)));const diagnostic=[n.stderr,n.stdout].filter(Boolean).join("\n").trim();throw new Error(`HA process ${n.index} exited during startup: ${JSON.stringify({survivors,failed:{index:n.index,stdout:n.stdout,stderr:n.stderr}})}${diagnostic?"":""}`)}
+      if(!n.process||n.process.exitCode!==null){await Promise.allSettled([n.stdoutDone,n.stderrDone]);const survivors=await Promise.all(this.nodes.filter(x=>x.index!==n.index).map(x=>this.diagnose(x.index)));const compactSurvivors=survivors.map((s:any)=>({index:s.index,status:s.status,error:s.error,state:s.state?{term:s.state.term,role:s.state.role,leaderId:s.state.leaderId,quorum:s.state.quorum,fenced:s.state.fenced,membershipSize:s.state.membershipSize,votingSize:s.state.votingSize,configurationVersion:s.state.configurationVersion,voters:s.state.voters,membershipReady:s.state.membershipReady,flow:s.state.flow}:undefined,stdout:s.stdout?.slice(-3000),stderr:s.stderr?.slice(-3000)}));throw new Error(`HA process ${n.index} exited during startup: ${JSON.stringify({survivors:compactSurvivors,failed:{index:n.index,stdout:n.stdout,stderr:n.stderr}})}`)}
       try{
         const r=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(250)});
         if(r.ok)return;
