@@ -186,7 +186,7 @@ try{
     }));
     const reachable=checks.filter(c=>c.ok);
     const allReachable=reachable.length===cluster.nodes.length;
-    const healthFailures=checks.filter(c=>!c.ok).map(c=>`node-${c.i}:${c.health.status}${c.health.error?\`:${c.health.error}\`:""}`);
+    const healthFailures=checks.filter(c=>!c.ok).map(c=>`node-${c.i}:${c.health.status}${c.health.error?`:${c.health.error}`:""}`);
     chaos.recordInvariant("all-nodes-reachable",allReachable,healthFailures.join(";"));
 
     const leaders=reachable.filter(c=>c.state.role==="leader").map(c=>c.state.leaderId||String(c.i));
