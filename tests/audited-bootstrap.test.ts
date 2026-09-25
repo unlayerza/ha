@@ -14,7 +14,7 @@ describe("audited bootstrap configuration path", () => {
     expect(committed.voters).toEqual(["a", "b"]);
   });
 
-  test("an empty receiver accepts the committed bootstrap proof using the proposed voter set as quorum", async () => {
+  test("an empty receiver accepts the committed bootstrap proof using the bootstrap proposer as the authorizing voter", async () => {
     const receiver = new ConfigurationManager(new TestClock(), () => "b", () => {});
     await receiver.load([]);
     const proposal = {
