@@ -61,7 +61,7 @@ export class LocalProcessCluster{
   private async waitReady(n:ProcessNode,timeoutMs:number){
     const deadline=Date.now()+timeoutMs;
     while(Date.now()<deadline){
-      if(!n.process||n.process.exitCode!==null){await Promise.allSettled([n.stdoutDone,n.stderrDone]);const diagnostic=[n.stderr,n.stdout].filter(Boolean).join("\n").trim();throw new Error(`HA process ${n.index} exited during startup${diagnostic?`:\n${diagnostic}`:""}`)}
+      if(!n.process||n.process.exitCode!==null){await Promise.allSettled([n.stdoutDone,n.stderrDone]);const survivors=await Promise.all(this.nodes.filter(x=>x.index!==n.index).map(x=>this.diagnose(x)));const diagnostic=[n.stderr,n.stdout].filter(Boolean).join("\n").trim();throw new Error(`HA process ${n.index} exited during startup: ${JSON.stringify({survivors,failed:{index:n.index,stdout:n.stdout,stderr:n.stderr}})}${diagnostic?"":" "}`)}
       try{
         const r=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(250)});
         if(r.ok)return;
@@ -86,7 +86,7 @@ export class LocalProcessCluster{
     const age=n.startedAt?Date.now()-n.startedAt:Infinity;
     try{
       const ready=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(750)});
-      if(!ready.ok)return{index,status:age<10000?"starting":"unreachable",error:`ready-http-${ready.status}`,stdout:n.stdout,stderr:n.stderr};
+      if(!ready.ok){let state:any;try{const response=await fetch(`http://127.0.0.1:${n.api}/state`,{signal:AbortSignal.timeout(1000)});if(response.ok)state=await response.json()}catch{}return{index,status:age<10000?"starting":"unreachable",error:`ready-http-${ready.status}`,state,stdout:n.stdout,stderr:n.stderr};
     }catch(error){return{index,status:age<10000?"starting":"unreachable",error:classifyProcessError(error),stdout:n.stdout,stderr:n.stderr}}
     try{
       const state=await fetch(`http://127.0.0.1:${n.api}/state`,{signal:AbortSignal.timeout(2500)});
