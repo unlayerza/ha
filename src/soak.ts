@@ -93,26 +93,29 @@ const classifyActionError=(error:unknown)=>{
   return"other";
 };
 
-const applyNetworkBurst=async(actions:ReturnType<typeof chooseAction>[])=>{
-  const selected=uniqueNetworkNodes(actions);
-  if(!selected.length)return false;
-  await Promise.all(selected.map(action=>{
+const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[])=>{
+  const network=uniqueNetworkNodes(actions);
+  const kills=[...new Set(actions.filter(action=>action.type==="kill").map(action=>Number(action.node)))];
+  const partition=network.find(action=>action.type==="partition");
+  if(partition){
+    const node=Number(partition.node),address=cluster.nodes[node].address;
+    const peers=cluster.nodes.filter((_,i)=>i!==node).map(n=>n.address);
+    await Promise.all(cluster.nodes.map((_,i)=>cluster.setChaos(i,i===node?{partition:peers}:{partition:[address]})));
+  }
+  await Promise.all(network.filter(action=>action.type!=="partition").map(action=>{
     const node=Number(action.node);
     if(action.type==="delay")return cluster.setChaos(node,{delayMs:action.ms||100});
     if(action.type==="drop")return cluster.setChaos(node,{dropRate:0.35});
     if(action.type==="duplicate")return cluster.setChaos(node,{duplicateRate:0.25});
     if(action.type==="reorder")return cluster.setChaos(node,{delayMs:120,reorder:true});
-    if(action.type==="partition"){
-      const address=cluster.nodes[node].address;
-      const peers=cluster.nodes.filter((_,i)=>i!==node).map(n=>n.address);
-      return Promise.all(cluster.nodes.map((_,i)=>cluster.setChaos(i,i===node?{partition:peers}:{partition:[address]}))).then(()=>({}));
-    }
     return Promise.resolve({});
   }));
+  if(kills.length)await Promise.all(kills.map(i=>cluster.hardKill(i)));
   await Bun.sleep(networkDwellMs);
   await cluster.heal();
-  await Bun.sleep(recoveryDwellMs);
-  return true;
+  if(kills.length)await Promise.all(kills.map(i=>cluster.restart(i)));
+  await Bun.sleep(Math.max(1200,recoveryDwellMs));
+  return kills.length+network.length>0;
 };
 
 const applyAction=async(action:ReturnType<typeof chooseAction>)=>{
@@ -161,11 +164,8 @@ try{
     iterations++;
 
     try{
-      const networkHandled=await applyNetworkBurst(actions);
-      const nonNetwork=actions.filter(action=>!networkActions.has(action.type));
-      if(!networkHandled||nonNetwork.length){
-        for(const action of nonNetwork)await applyAction(action);
-      }
+      await applyFaultWindow(actions);
+      if(actions.some(action=>action.type==="heal"))await cluster.heal();
     }catch(error){
       actionErrors++;
       const kind=classifyActionError(error);
@@ -259,10 +259,11 @@ try{
       }:null,
     },
   };
-  if(compact){
-    const boundedFailures=campaign.unexpectedFailures.length>10?[...campaign.unexpectedFailures.slice(0,5),...campaign.unexpectedFailures.slice(-5)]:campaign.unexpectedFailures;
-    console.log(JSON.stringify({...result,unexpectedFailureCount:campaign.unexpectedFailures.length,unexpectedFailures:boundedFailures}));
-  }else console.log(JSON.stringify({...campaign,...result},null,2));
+    const reportDir=Bun.env.HA_SOAK_REPORT_DIR||".ha-soak";
+  await Bun.write(reportDir+"/campaign-"+seed+"-"+(campaign.finishedAt||Date.now())+".json",JSON.stringify({...campaign,...result},null,2)).catch(()=>{});
+  const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
+  const terminal={...result,invariantSummary,unexpectedFailureCount:campaign.unexpectedFailures.length,reportDir};
+  console.log(JSON.stringify(compact?terminal:{...terminal,actionCounts:campaign.actionCounts,failures:campaign.failures},null,2));
 }finally{
   if(resourceTimer)clearInterval(resourceTimer);
   await cluster.cleanup();
