@@ -37,7 +37,9 @@ export class Election{
   private async send(kind:string,payload:unknown){const m={id:id("msg"),kind,from:this.nodeId,term:this.term,configurationVersion:this.hooks.configurationVersion(),sentAt:this.clock.now(),payload,signature:""} as ClusterMessage;try{await this.transport.broadcast(this.nodeId,m)}catch{}}
   async receive(m:ClusterMessage){
     const configVersion=m.configurationVersion;
-    if(configVersion!==undefined&&configVersion!==this.hooks.configurationVersion())throw new StaleTermError("stale configuration");
+    const currentConfigurationVersion=this.hooks.configurationVersion();
+    const staleHeartbeat=configVersion!==undefined&&configVersion<currentConfigurationVersion&&m.kind==="heartbeat";
+    if(configVersion!==undefined&&configVersion!==currentConfigurationVersion&&!staleHeartbeat)throw new StaleTermError("stale configuration");
     if(m.kind==="pre_vote_request")return this.onPreVoteRequest(m);
     if(m.kind==="pre_vote_response")return this.onPreVoteResponse(m);
     if(m.term<this.term)throw new StaleTermError();
