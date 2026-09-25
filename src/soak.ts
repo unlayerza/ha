@@ -118,44 +118,6 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[])=>{
   return kills.length+network.length>0;
 };
 
-const applyAction=async(action:ReturnType<typeof chooseAction>)=>{
-  if(action.type==="kill"){
-    const i=Number(action.node);
-    await cluster.hardKill(i);
-    await Bun.sleep(700);
-    await cluster.restart(i);
-    await Bun.sleep(1200);
-  }else if(action.type==="delay"){
-    await cluster.setChaos(Number(action.node),{delayMs:action.ms||100});
-    await Bun.sleep(networkDwellMs);
-    await cluster.heal();
-    await Bun.sleep(recoveryDwellMs);
-  }else if(action.type==="drop"){
-    await cluster.setChaos(Number(action.node),{dropRate:0.35});
-    await Bun.sleep(networkDwellMs);
-    await cluster.heal();
-    await Bun.sleep(recoveryDwellMs);
-  }else if(action.type==="duplicate"){
-    await cluster.setChaos(Number(action.node),{duplicateRate:0.25});
-    await Bun.sleep(networkDwellMs);
-    await cluster.heal();
-    await Bun.sleep(recoveryDwellMs);
-  }else if(action.type==="reorder"){
-    await cluster.setChaos(Number(action.node),{delayMs:120,reorder:true});
-    await Bun.sleep(networkDwellMs);
-    await cluster.heal();
-    await Bun.sleep(recoveryDwellMs);
-  }else if(action.type==="partition"){
-    await cluster.isolate(Number(action.node));
-    await Bun.sleep(networkDwellMs);
-    await cluster.heal();
-    await Bun.sleep(recoveryDwellMs);
-  }else{
-    await cluster.heal();
-    await Bun.sleep(Math.max(100,recoveryDwellMs));
-  }
-};
-
 try{
   resourceTimer=setInterval(()=>void recordResources(),5000);
 
@@ -260,6 +222,7 @@ try{
     },
   };
     const reportDir=Bun.env.HA_SOAK_REPORT_DIR||".ha-soak";
+  await Bun.mkdir(reportDir,{recursive:true});
   await Bun.write(reportDir+"/campaign-"+seed+"-"+(campaign.finishedAt||Date.now())+".json",JSON.stringify({...campaign,...result},null,2)).catch(()=>{});
   const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
   const terminal={...result,invariantSummary,unexpectedFailureCount:campaign.unexpectedFailures.length,reportDir};
