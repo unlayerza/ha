@@ -238,6 +238,18 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
   if(kills.length)await Promise.all(kills.map(i=>cluster.restart(i)));
   await Bun.sleep(Math.max(1200,recoveryDwellMs));
   await observeTransition("recovered");
+  if(scenario==="rapid-leader-churn"){
+    const nextLeader=await currentLeader();
+    if(nextLeader!==undefined){
+      await readTransitionEvidence(scenario,"second-leader-before-kill");
+      await cluster.hardKill(nextLeader);
+      await observeTransition("second-leader-killed");
+      await Bun.sleep(networkDwellMs);
+      await cluster.restart(nextLeader);
+      await Bun.sleep(Math.max(1200,recoveryDwellMs));
+      await observeTransition("second-leader-recovered");
+    }
+  }
   return kills.length+network.length>0;
 };
 
