@@ -295,6 +295,10 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
       await observeTransition("second-leader-killed");
       await Bun.sleep(networkDwellMs);
       const thirdLeader=await waitForAuthoritativeLeader(new Set([nextLeader]),15000);
+      if(thirdLeader===undefined){
+        const diagnostic=await readTransitionEvidence(scenario,"third-leader-timeout");
+        chaos.recordInvariant("leader-churn-third-leader-diagnostic",diagnostic.length>0,JSON.stringify(diagnostic));
+      }
       const thirdState=thirdLeader===undefined?undefined:await cluster.state(thirdLeader) as any;
       chaos.recordInvariant("leader-churn-third-leader-exists",thirdLeader!==undefined,"second="+nextLeader+" third="+(thirdLeader??"none"));
       chaos.recordInvariant("leader-churn-third-leader-different",thirdLeader!==undefined&&thirdLeader!==nextLeader,"second="+nextLeader+" third="+(thirdLeader??"none"));
