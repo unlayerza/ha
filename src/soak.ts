@@ -63,6 +63,76 @@ const chooseAction=()=>chaos.choose([
   {type:"heal"}
 ]);
 
+const scenarioCounts:Record<string,number>={};
+const transitionEvidence:Array<{at:number;scenario:string;label:string;nodes:Array<{index:number;role?:string;term?:string;quorum?:boolean;fenced?:boolean;leaderId?:string;configurationVersion?:string}>}>=[];
+
+const readTransitionEvidence=async(scenario:string,label:string)=>{
+  const nodes=await Promise.all(cluster.nodes.map(async(_,i)=>{
+    try{
+      const state=await cluster.state(i) as any;
+      return{index:i,role:state.role,term:String(state.term),quorum:!!state.quorum,fenced:!!state.fenced,leaderId:state.leaderId||undefined,configurationVersion:String(state.configurationVersion??"0")};
+    }catch{return undefined}
+  }));
+  transitionEvidence.push({at:Date.now(),scenario,label,nodes:nodes.filter((node):node is NonNullable<typeof node>=>node!==undefined)});
+  return nodes;
+};
+
+const currentLeader=async()=>{
+  try{
+    const states=await Promise.all(cluster.nodes.map((_,i)=>cluster.state(i) as Promise<any>));
+    const leaders=states.map((state:any,index)=>state?.role==="leader"?index:undefined).filter((index):index is number=>index!==undefined);
+    return leaders.length===1?leaders[0]:undefined;
+  }catch{return undefined}
+};
+
+const chooseScenarioWindow=async()=>{
+  const leader=await currentLeader();
+  const scenarios:string[]=[];
+  if(leader!==undefined)scenarios.push("leader-assassination","leader-double-fault","rapid-leader-churn");
+  scenarios.push("quorum-boundary","minority-isolation");
+  const scenario=scenarios[chaos.random.int(scenarios.length)];
+  scenarioCounts[scenario]=(scenarioCounts[scenario]||0)+1;
+  if(leader===undefined){
+    return{scenario,actions:Array.from({length:burst},()=>chooseAction())};
+  }
+  if(scenario==="leader-assassination"){
+    return{scenario,actions:[
+      {type:"partition",node:String(leader)},
+      {type:"kill",node:String(leader)},
+      {type:"drop",node:String(chaos.random.int(cluster.nodes.length))},
+      {type:"reorder",node:String(chaos.random.int(cluster.nodes.length))}
+    ].slice(0,Math.max(2,burst))};
+  }
+  if(scenario==="leader-double-fault"){
+    let second=chaos.random.int(cluster.nodes.length);
+    while(second===leader)second=chaos.random.int(cluster.nodes.length);
+    return{scenario,actions:[
+      {type:"partition",node:String(leader)},
+      {type:"kill",node:String(leader)},
+      {type:"kill",node:String(second)},
+      {type:"delay",node:String(second),ms:150}
+    ].slice(0,Math.max(3,burst))};
+  }
+  if(scenario==="rapid-leader-churn"){
+    return{scenario,actions:[
+      {type:"partition",node:String(leader)},
+      {type:"kill",node:String(leader)},
+      {type:"drop",node:String(chaos.random.int(cluster.nodes.length))},
+      {type:"duplicate",node:String(chaos.random.int(cluster.nodes.length))}
+    ].slice(0,Math.max(2,burst))};
+  }
+  if(scenario==="quorum-boundary"){
+    const peers=cluster.nodes.filter((_,i)=>i!==leader);
+    const second=peers[chaos.random.int(peers.length)].index;
+    return{scenario,actions:[
+      {type:"partition",node:String(leader)},
+      {type:"kill",node:String(second)}
+    ].slice(0,Math.max(2,burst))};
+  }
+  const minority=cluster.nodes.slice(0,Math.max(1,Math.floor(cluster.nodes.length/2)-1)).map(n=>n.index);
+  return{scenario,actions:minority.map(index=>({type:"partition",node:String(index)})).slice(0,Math.max(1,Math.min(burst,minority.length)))};
+};
+
 const chooseFaultWindow=async()=>{
   let leader:number|undefined;
   try{
@@ -174,8 +244,8 @@ try{
     iterations++;
 
     try{
-      await applyFaultWindow(actions);
-      if(actions.some(action=>action.type==="heal"))await cluster.heal();
+      await readTransitionEvidence(selected.scenario,"pre-fault");\n      await applyFaultWindow(actions);
+      if(actions.some(action=>action.type==="heal"))await cluster.heal();\n      await readTransitionEvidence(selected.scenario,"after");
     }catch(error){
       actionErrors++;
       const kind=classifyActionError(error);
@@ -256,7 +326,7 @@ try{
     unexpectedFailures:campaign.unexpectedFailures,
     nodeHealth:(await Promise.all(cluster.nodes.map((_,i)=>cluster.diagnose(i)))).reduce((a,h)=>(a[h.status]++,a),{ready:0,starting:0,unreachable:0,dead:0} as Record<string,number>),
     failureCounts:campaign.failures.reduce((a,name)=>(a[name]=(a[name]||0)+1,a),{} as Record<string,number>),
-    expectedProcessCount:nodeCount+1,
+    expectedProcessCount:nodeCount+1,\n    scenarioCounts,\n    transitionEvidence,
     resources:{
       supported:resourceSamples.some(s=>s.supported),
       samples:resourceSamples.length,
