@@ -224,8 +224,9 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
   const network=uniqueNetworkNodes(actions);
   const kills=[...new Set(actions.filter(action=>action.type==="kill").map(action=>Number(action.node)))];
   const partition=network.find(action=>action.type==="partition");
-  if(scenario==="minority-isolation"){
-    const minority=cluster.nodes.slice(0,Math.max(1,Math.floor(cluster.nodes.length/2)-1)).map(n=>n.index);
+  if(scenario==="minority-isolation"||scenario==="quorum-split"){
+    const split=Math.floor(cluster.nodes.length/2)+(scenario==="quorum-split"?0:-1);
+    const minority=cluster.nodes.slice(0,Math.max(1,split)).map(n=>n.index);
     const majority=cluster.nodes.map(n=>n.index).filter(index=>!minority.includes(index));
     await cluster.partitionGroups([minority,majority]);
     await observeTransition("minority-isolation-applied");
