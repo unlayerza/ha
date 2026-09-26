@@ -11,6 +11,8 @@ export class Membership {
   private members = new Map<string, Member>();
   private v = 0n;
   private listeners = new Set<(s: MembershipSnapshot) => void>();
+  // Local failure-detector evidence; kept out of the gossiped member record so it never outranks a peer's own advertisement.
+  private contact = new Map<string, number>();
 
   constructor(private clock: Clock, private local: Member, private emit: (e: HAEvent) => void) {
     this.members.set(local.id, local);
@@ -91,7 +93,10 @@ export class Membership {
 
   touch(nodeId: string) {
     const member = this.members.get(nodeId);
-    if (member) member.lastSeen = this.clock.now();
+    if (!member) return;
+    this.contact.set(nodeId, this.clock.now());
+    // Direct contact clears a failure-detector suspicion; other statuses are owned by lifecycle/admission.
+    if (member.status === "suspect") this.setStatus(nodeId, "healthy");
   }
 
   update(nodeId: string, patch: Partial<Member>) {
@@ -149,7 +154,7 @@ export class Membership {
     for (const member of this.values()) {
       if (
         member.id !== this.local.id &&
-        now - member.lastSeen > timeout &&
+        now - Math.max(member.lastSeen, this.contact.get(member.id) ?? 0) > timeout &&
         ["healthy", "degraded"].includes(member.status)
       ) this.setStatus(member.id, "suspect");
     }

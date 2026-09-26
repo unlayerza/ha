@@ -35,6 +35,7 @@ const unwire=(s:string)=>{
   return m as ClusterMessage;
 };
 
+const normalizeAddress=(x:string)=>x.replace(/^https?:\/\//,"").replace(/\/$/,"");
 export class HttpTransport implements Transport{
   private server?:ReturnType<typeof Bun.serve>;
   private peers=new Map<string,string>();
@@ -50,7 +51,7 @@ export class HttpTransport implements Transport{
     }})
   }
   async stop(){this.server?.stop()}
-  private blocked(to:string,m:ClusterMessage){return !!(this.policy.partition?.has(to)||this.policy.partition?.has(m.fromAddress||m.from))}
+  private blocked(to:string,m:ClusterMessage){const partition=this.policy.partition;if(!partition?.size)return false;const blocked=new Set([...partition].map(normalizeAddress));return blocked.has(normalizeAddress(to))||blocked.has(normalizeAddress(m.fromAddress||m.from))}
   private async deliver(to:string,m:ClusterMessage){
     if(this.blocked(to,m))return false;
     if(this.policy.dropRate&&Math.random()<this.policy.dropRate)return false;
@@ -63,9 +64,9 @@ export class HttpTransport implements Transport{
     if(this.policy.duplicateRate&&Math.random()<this.policy.duplicateRate)void fetch(this.endpoint(to),{method:"POST",headers:{"content-type":"application/json"},body:wire(m),signal:AbortSignal.timeout(1000)}).catch(()=>{});
     return true;
   }
-  private endpoint(to:string){return(to.includes("://")?to:this.peers.get(to)||to).replace(/\/$/,"")+"/ha/message"}
+  private endpoint(to:string){const peer=to.includes("://")?to:this.peers.get(to)||[...this.peers.values()].find(p=>normalizeAddress(p)===normalizeAddress(to))||"http://"+to;return peer.replace(/\/$/,"")+"/ha/message"}
   async send(to:string,m:ClusterMessage){await this.deliver(to,m)}
-  async broadcast(from:string,m:ClusterMessage){const normalize=(x:string)=>x.replace(/^https?:\/\//,"").replace(/\/$/,"");const sender=normalize(from);await Promise.all([...this.peers.keys()].filter(x=>normalize(x)!==sender).map(x=>this.deliver(x,m).catch(()=>{})))}
+  async broadcast(from:string,m:ClusterMessage){const normalize=normalizeAddress;const sender=normalize(from);await Promise.all([...this.peers.keys()].filter(x=>normalize(x)!==sender).map(x=>this.deliver(x,m).catch(()=>{})))}
 }
 
 export class ChaosTransport implements Transport{

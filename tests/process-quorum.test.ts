@@ -18,9 +18,20 @@ describe("process quorum recovery",()=>{
         throw new Error(`initial cluster convergence failed: ${JSON.stringify({states:compact,diagnostics})}`);
       }
 
+      // Election timeouts are 1200-3000ms, so poll for re-election instead of sleeping a fixed interval.
+      const settle=async(done:(states:any[])=>boolean,timeoutMs:number)=>{
+        const until=Date.now()+timeoutMs;
+        let states:any[]=[];
+        while(Date.now()<until){
+          states=await Promise.all(cluster.nodes.map((_,i)=>cluster.state(i) as Promise<any>));
+          if(done(states))break;
+          await Bun.sleep(200);
+        }
+        return states;
+      };
+
       await cluster.partitionGroups([[0,1],[2,3,4]]);
-      await Bun.sleep(1800);
-      const partitioned=await Promise.all(cluster.nodes.map((_,i)=>cluster.state(i) as Promise<any>));
+      const partitioned=await settle(s=>s.slice(0,2).every(x=>x.quorum===false)&&s.slice(2).filter(x=>x.role==="leader"&&x.quorum===true).length===1,10000);
       const minority=partitioned.slice(0,2);
       const majority=partitioned.slice(2);
       expect(minority.every(s=>s.quorum===false)).toBe(true);
@@ -28,8 +39,7 @@ describe("process quorum recovery",()=>{
       expect(majority.filter(s=>s.role==="leader"&&s.quorum===true)).toHaveLength(1);
 
       await cluster.heal();
-      await Bun.sleep(2200);
-      const recovered=await Promise.all(cluster.nodes.map((_,i)=>cluster.state(i) as Promise<any>));
+      const recovered=await settle(s=>s.every(x=>x.quorum===true&&x.membershipReady)&&new Set(s.map(x=>x.term.toString())).size===1&&s.filter(x=>x.role==="leader").length===1,10000);
       expect(recovered.every(s=>s.quorum===true)).toBe(true);
       expect(new Set(recovered.map(s=>s.term.toString())).size).toBe(1);
       expect(recovered.filter(s=>s.role==="leader")).toHaveLength(1);

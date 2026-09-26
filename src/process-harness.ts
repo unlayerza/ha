@@ -61,7 +61,7 @@ export class LocalProcessCluster{
   private async waitReady(n:ProcessNode,timeoutMs:number){
     const deadline=Date.now()+timeoutMs;
     while(Date.now()<deadline){
-      if(!n.process||n.process.exitCode!==null){await Promise.allSettled([n.stdoutDone,n.stderrDone]);const diagnostic=[n.stderr,n.stdout].filter(Boolean).join("\n").trim();throw new Error(`HA process ${n.index} exited during startup${diagnostic?`:\n${diagnostic}`:""}`)}
+      if(!n.process||n.process.exitCode!==null){await Promise.allSettled([n.stdoutDone,n.stderrDone]);const survivors=await Promise.all(this.nodes.filter(x=>x.index!==n.index).map(x=>this.diagnose(x.index)));const compactSurvivors=survivors.map((s:any)=>({index:s.index,status:s.status,error:s.error,state:s.state?{term:s.state.term,role:s.state.role,leaderId:s.state.leaderId,quorum:s.state.quorum,fenced:s.state.fenced,membershipSize:s.state.membershipSize,votingSize:s.state.votingSize,configurationVersion:s.state.configurationVersion,voters:s.state.voters,quorumVoters:s.state.quorumVoters,membershipReady:s.state.membershipReady,flow:s.state.flow}:undefined,stdout:s.stdout?.slice(-3000),stderr:s.stderr?.slice(-3000)}));throw new Error(`HA process ${n.index} exited during startup: ${JSON.stringify({survivors:compactSurvivors,failed:{index:n.index,stdout:n.stdout,stderr:n.stderr}})}`)}
       try{
         const r=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(250)});
         if(r.ok)return;
@@ -81,25 +81,28 @@ export class LocalProcessCluster{
     if(!r.ok)throw new Error(`HA state request failed: HTTP ${r.status}`);
     return r.json()
   }
-  async diagnose(index:number):Promise<{index:number;status:"ready"|"starting"|"unreachable"|"dead";error?:string;stdout?:string;stderr?:string}>{
-    const n=this.nodes[index];const p=n.process;if(!p||p.exitCode!==null)return{index,status:"dead"};
+  async diagnose(index:number):Promise<{index:number;status:"ready"|"starting"|"unreachable"|"dead";error?:string;state?:any;stdout?:string;stderr?:string}>{
+    const n=this.nodes[index];if(!n)return{index,status:"dead",error:"unknown-process-node"};const p=n.process;if(!p||p.exitCode!==null)return{index,status:n.startedAt?"dead":"starting"};
     const age=n.startedAt?Date.now()-n.startedAt:Infinity;
     try{
       const ready=await fetch(`http://127.0.0.1:${n.api}/ready`,{signal:AbortSignal.timeout(750)});
-      if(!ready.ok)return{index,status:age<10000?"starting":"unreachable",error:`ready-http-${ready.status}`,stdout:n.stdout,stderr:n.stderr};
-    }catch(error){return{index,status:age<10000?"starting":"unreachable",error:classifyProcessError(error),stdout:n.stdout,stderr:n.stderr}}
-    try{
-      const state=await fetch(`http://127.0.0.1:${n.api}/state`,{signal:AbortSignal.timeout(2500)});
-      if(state.ok)return{index,status:"ready",stdout:n.stdout,stderr:n.stderr};
-      return{index,status:"unreachable",error:`state-http-${state.status}`,stdout:n.stdout,stderr:n.stderr};
-    }catch(error){return{index,status:"unreachable",error:classifyProcessError(error),stdout:n.stdout,stderr:n.stderr}}
+      let state:any;
+      try{const response=await fetch(`http://127.0.0.1:${n.api}/state`,{signal:AbortSignal.timeout(1000)});if(response.ok)state=await response.json()}catch{}
+      if(ready.ok)return{index,status:"ready",state,stdout:n.stdout,stderr:n.stderr};
+      return{index,status:age<10000?"starting":"unreachable",error:`ready-http-${ready.status}`,state,stdout:n.stdout,stderr:n.stderr};
+    }catch(error){
+      return{index,status:age<10000?"starting":"unreachable",error:classifyProcessError(error),stdout:n.stdout,stderr:n.stderr};
+    }
   }
   async setChaos(index:number,policy:ChaosPolicy){
     const r=await fetch(`http://127.0.0.1:${this.nodes[index].api}/chaos`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({delayMs:policy.delayMs||0,dropRate:policy.dropRate||0,duplicateRate:policy.duplicateRate||0,reorder:!!policy.reorder,partition:[...(policy.partition||[])]}),signal:AbortSignal.timeout(3000)});
     if(!r.ok)throw new Error(`HA chaos request failed for node ${index}: HTTP ${r.status}`);
     return r.json()
   }
-  async clearChaos(){await Promise.all(this.nodes.map((_,i)=>this.setChaos(i,{})))}
+  async clearChaos(){
+    const live=this.nodes.filter(n=>n.process&&n.process.exitCode===null);
+    await Promise.allSettled(live.map(n=>this.setChaos(n.index,{})));
+  }
   async isolate(index:number){
     const address=this.nodes[index].address;
     const peers=this.nodes.filter((_,j)=>j!==index).map(x=>x.address);
