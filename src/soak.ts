@@ -61,6 +61,25 @@ const chooseAction=()=>chaos.choose([
   {type:"partition",node:String(randomNode())},
   {type:"heal"}
 ]);
+
+const chooseFaultWindow=async()=>{
+  let leader:number|undefined;
+  try{
+    const states=await Promise.all(cluster.nodes.map((_,i)=>cluster.state(i) as Promise<any>));
+    const leaders=states.map((state:any,index)=>state?.role==="leader"?index:undefined).filter((index):index is number=>index!==undefined);
+    if(leaders.length===1)leader=leaders[0];
+  }catch{}
+
+  const targeted=leader!==undefined&&chaos.random.int(100)<40;
+  if(!targeted)return Array.from({length:burst},()=>chooseAction());
+
+  const actions=[
+    {type:"partition",node:String(leader)},
+    {type:"kill",node:String(leader)},
+  ];
+  while(actions.length<burst)actions.push(chooseAction());
+  return actions;
+};
 const uniqueNetworkNodes=(actions:ReturnType<typeof chooseAction>)=>{
   const seen=new Set<number>();
   return actions.filter(action=>{
@@ -122,7 +141,7 @@ try{
   resourceTimer=setInterval(()=>void recordResources(),5000);
 
   while(Date.now()<end){
-    const actions=Array.from({length:burst},()=>chooseAction());
+    const actions=await chooseFaultWindow();
     iterations++;
 
     try{
@@ -223,9 +242,17 @@ try{
   };
     const reportDir=Bun.env.HA_SOAK_REPORT_DIR||".ha-soak";
   await Bun.mkdir(reportDir,{recursive:true});
-  await Bun.write(reportDir+"/campaign-"+seed+"-"+(campaign.finishedAt||Date.now())+".json",JSON.stringify({...campaign,...result},null,2)).catch(()=>{});
+  const reportPath=reportDir+"/campaign-"+seed+"-"+(campaign.finishedAt||Date.now())+".json";
+  try{
+    await Bun.write(reportPath,JSON.stringify({...campaign,...result},null,2));
+  }catch(error){
+    actionErrors++;
+    const kind="report-write-error";
+    actionErrorTypes[kind]=(actionErrorTypes[kind]||0)+1;
+    console.error("HA soak report write failed:",reportPath,String(error));
+  }
   const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
-  const terminal={...result,invariantSummary,unexpectedFailureCount:campaign.unexpectedFailures.length,reportDir};
+  const terminal={...result,invariantSummary,unexpectedFailureCount:campaign.unexpectedFailures.length,reportDir,reportPath};
   console.log(JSON.stringify(compact?terminal:{...terminal,actionCounts:campaign.actionCounts,failures:campaign.failures},null,2));
 }finally{
   if(resourceTimer)clearInterval(resourceTimer);
