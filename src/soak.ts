@@ -89,7 +89,7 @@ const chooseScenarioWindow=async()=>{
   const leader=await currentLeader();
   const scenarios:string[]=[];
   if(leader!==undefined)scenarios.push("leader-assassination","leader-double-fault","rapid-leader-churn");
-  scenarios.push("quorum-boundary","minority-isolation");
+  scenarios.push("quorum-split","minority-isolation");
   const scenario=scenarios[chaos.random.int(scenarios.length)];
   scenarioCounts[scenario]=(scenarioCounts[scenario]||0)+1;
   if(leader===undefined){
@@ -121,13 +121,11 @@ const chooseScenarioWindow=async()=>{
       {type:"duplicate",node:String(chaos.random.int(cluster.nodes.length))}
     ].slice(0,Math.max(2,burst))};
   }
-  if(scenario==="quorum-boundary"){
-    const peers=cluster.nodes.filter((_,i)=>i!==leader);
-    const second=peers[chaos.random.int(peers.length)].index;
-    return{scenario,actions:[
-      {type:"partition",node:String(leader)},
-      {type:"kill",node:String(second)}
-    ].slice(0,Math.max(2,burst))};
+  if(scenario==="quorum-split"){
+    const half=Math.floor(cluster.nodes.length/2);
+    const first=Array.from({length:half},(_,i)=>i);
+    const second=cluster.nodes.map(n=>n.index).filter(i=>!first.includes(i));
+    return{scenario,actions:first.map(index=>({type:"partition",node:String(index)})).concat(second.map(index=>({type:"partition",node:String(index)}))).slice(0,cluster.nodes.length)};
   }
   const minority=cluster.nodes.slice(0,Math.max(1,Math.floor(cluster.nodes.length/2)-1)).map(n=>n.index);
   return{scenario,actions:minority.map(index=>({type:"partition",node:String(index)})).slice(0,Math.max(1,Math.min(burst,minority.length)))};
@@ -207,6 +205,21 @@ const observeTransition=async(label:string)=>{
   return live;
 };
 
+const observeQuorumTopology=async(scenario:string)=>{
+  if(scenario!=="quorum-split")return;
+  const half=Math.floor(cluster.nodes.length/2);
+  const groups=[Array.from({length:half},(_,i)=>i),cluster.nodes.map(n=>n.index).filter(i=>i>=half)];
+  const states=await Promise.all(groups.map(async group=>{
+    const live=await Promise.all(group.map(async i=>{try{return{i,state:await cluster.state(i) as any}}catch{return undefined}}));
+    const usable=live.filter((x):x is {i:number;state:any}=>x!==undefined);
+    const authorities=usable.filter(x=>x.state.role==="leader"&&!x.state.fenced&&x.state.quorum);
+    const quorumCount=usable.filter(x=>x.state.quorum).length;
+    return{size:group.length,observed:usable.length,quorumCount,authorities:authorities.map(x=>x.i)};
+  }));
+  const exact=groups.every((group,i)=>states[i].size===half&&states[i].observed===group.length);
+  const safe=exact&&states.every(s=>s.authorities.length===0);
+  chaos.recordInvariant("quorum-split-no-authority",safe,JSON.stringify(states));
+};
 const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario="random")=>{
   const network=uniqueNetworkNodes(actions);
   const kills=[...new Set(actions.filter(action=>action.type==="kill").map(action=>Number(action.node)))];
@@ -221,6 +234,7 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
     const peers=cluster.nodes.filter((_,i)=>i!==node).map(n=>n.address);
     await Promise.all(cluster.nodes.map((_,i)=>cluster.setChaos(i,i===node?{partition:peers}:{partition:[address]})));
     await observeTransition("partition-applied");
+    await observeQuorumTopology(scenario);
   }
   await Promise.all(network.filter(action=>action.type!=="partition").map(action=>{
     const node=Number(action.node);
