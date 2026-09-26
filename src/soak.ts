@@ -257,12 +257,16 @@ try{
   resourceTimer=setInterval(()=>void recordResources(),5000);
 
   while(Date.now()<end){
-    const actions=await chooseFaultWindow();
+    const selected=Bun.env.HA_SOAK_SCENARIOS==="1"?await chooseScenarioWindow():{scenario:"random",actions:await chooseFaultWindow()};
+    const actions=selected.actions;
+    await readTransitionEvidence(selected.scenario,"before");
     iterations++;
 
     try{
-      await readTransitionEvidence(selected.scenario,"pre-fault");\n      await applyFaultWindow(actions,selected.scenario);
-      if(actions.some(action=>action.type==="heal"))await cluster.heal();\n      await readTransitionEvidence(selected.scenario,"after");
+      await readTransitionEvidence(selected.scenario,"pre-fault");
+      await applyFaultWindow(actions,selected.scenario);
+      if(actions.some(action=>action.type==="heal"))await cluster.heal();
+      await readTransitionEvidence(selected.scenario,"after");
     }catch(error){
       actionErrors++;
       const kind=classifyActionError(error);
