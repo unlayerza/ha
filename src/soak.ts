@@ -243,16 +243,15 @@ try{
     const reportDir=Bun.env.HA_SOAK_REPORT_DIR||".ha-soak";
   await Bun.mkdir(reportDir,{recursive:true});
   const reportPath=reportDir+"/campaign-"+seed+"-"+(campaign.finishedAt||Date.now())+".json";
+  let reportWriteError:string|undefined;
   try{
     await Bun.write(reportPath,JSON.stringify({...campaign,...result},null,2));
   }catch(error){
-    actionErrors++;
-    const kind="report-write-error";
-    actionErrorTypes[kind]=(actionErrorTypes[kind]||0)+1;
-    console.error("HA soak report write failed:",reportPath,String(error));
+    reportWriteError=String(error);
+    console.error("HA soak report write failed:",reportPath,reportWriteError);
   }
   const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
-  const terminal={...result,invariantSummary,unexpectedFailureCount:campaign.unexpectedFailures.length,reportDir,reportPath};
+  const terminal={...result,invariantSummary,unexpectedFailureCount:campaign.unexpectedFailures.length,reportDir,reportPath,reportWriteError};
   console.log(JSON.stringify(compact?terminal:{...terminal,actionCounts:campaign.actionCounts,failures:campaign.failures},null,2));
 }finally{
   if(resourceTimer)clearInterval(resourceTimer);
