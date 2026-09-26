@@ -207,11 +207,16 @@ const observeTransition=async(label:string)=>{
   return live;
 };
 
-const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[])=>{
+const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario="random")=>{
   const network=uniqueNetworkNodes(actions);
   const kills=[...new Set(actions.filter(action=>action.type==="kill").map(action=>Number(action.node)))];
   const partition=network.find(action=>action.type==="partition");
-  if(partition){
+  if(scenario==="minority-isolation"){
+    const minority=cluster.nodes.slice(0,Math.max(1,Math.floor(cluster.nodes.length/2)-1)).map(n=>n.index);
+    const majority=cluster.nodes.map(n=>n.index).filter(index=>!minority.includes(index));
+    await cluster.partitionGroups([minority,majority]);
+    await observeTransition("minority-isolation-applied");
+  }else if(partition){
     const node=Number(partition.node),address=cluster.nodes[node].address;
     const peers=cluster.nodes.filter((_,i)=>i!==node).map(n=>n.address);
     await Promise.all(cluster.nodes.map((_,i)=>cluster.setChaos(i,i===node?{partition:peers}:{partition:[address]})));
@@ -244,7 +249,7 @@ try{
     iterations++;
 
     try{
-      await readTransitionEvidence(selected.scenario,"pre-fault");\n      await applyFaultWindow(actions);
+      await readTransitionEvidence(selected.scenario,"pre-fault");\n      await applyFaultWindow(actions,selected.scenario);
       if(actions.some(action=>action.type==="heal"))await cluster.heal();\n      await readTransitionEvidence(selected.scenario,"after");
     }catch(error){
       actionErrors++;
