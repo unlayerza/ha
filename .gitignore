@@ -114,3 +114,4 @@ dist
 
 # HA test harness scratch directories
 .ha-*/
+.ha-soak/
