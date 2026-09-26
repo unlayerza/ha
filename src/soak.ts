@@ -279,7 +279,7 @@ try{
     reportWriteError=String(error);
     console.error("HA soak report write failed:",reportPath,reportWriteError);
   }
-  const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
+  const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered","transition-authority-unique","transition-term-monotonic","transition-configuration-monotonic"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
   const terminal={...result,invariantSummary,unexpectedFailureCount:campaign.unexpectedFailures.length,reportDir,reportPath,reportWriteError};
   console.log(JSON.stringify(compact?terminal:{...terminal,actionCounts:campaign.actionCounts,failures:campaign.failures},null,2));
 }finally{
