@@ -77,16 +77,35 @@ const readTransitionEvidence=async(scenario:string,label:string)=>{
   return nodes;
 };
 
-const currentLeader=async()=>{
+const authoritativeLeader=async()=>{
   try{
     const states=await Promise.all(cluster.nodes.map((_,i)=>cluster.state(i) as Promise<any>));
-    const leaders=states.map((state:any,index)=>state?.role==="leader"?index:undefined).filter((index):index is number=>index!==undefined);
+    const leaders=states.map((state:any,index)=>state?.role==="leader"&&!state?.fenced&&state?.quorum?index:undefined).filter((index):index is number=>index!==undefined);
     return leaders.length===1?leaders[0]:undefined;
   }catch{return undefined}
 };
+const waitForAuthoritativeLeader=async(excluded=new Set<number>(),timeoutMs=10000)=>{
+  const deadline=Date.now()+timeoutMs;
+  while(Date.now()<deadline){
+    const leader=await authoritativeLeader();
+    if(leader!==undefined&&!excluded.has(leader))return leader;
+    await Bun.sleep(100);
+  }
+  return undefined;
+};
+const currentLeader=async()=>authoritativeLeader();
 
 const chooseScenarioWindow=async()=>{
   const leader=await currentLeader();
+  let leaderTerm:string|undefined;
+  let leaderConfiguration:string|undefined;
+  if(leader!==undefined){
+    try{
+      const state=await cluster.state(leader) as any;
+      leaderTerm=String(state.term??"0");
+      leaderConfiguration=String(state.configurationVersion??"0");
+    }catch{}
+  }
   const scenarios:string[]=[];
   if(leader!==undefined)scenarios.push("leader-assassination","leader-double-fault","rapid-leader-churn");
   scenarios.push("quorum-split","minority-isolation");
@@ -96,7 +115,7 @@ const chooseScenarioWindow=async()=>{
     return{scenario,actions:Array.from({length:burst},()=>chooseAction())};
   }
   if(scenario==="leader-assassination"){
-    return{scenario,actions:[
+    return{scenario,originalLeader:leader,originalTerm:leaderTerm,originalConfiguration:leaderConfiguration,actions:[
       {type:"partition",node:String(leader)},
       {type:"kill",node:String(leader)},
       {type:"drop",node:String(chaos.random.int(cluster.nodes.length))},
@@ -106,7 +125,7 @@ const chooseScenarioWindow=async()=>{
   if(scenario==="leader-double-fault"){
     let second=chaos.random.int(cluster.nodes.length);
     while(second===leader)second=chaos.random.int(cluster.nodes.length);
-    return{scenario,actions:[
+    return{scenario,originalLeader:leader,originalTerm:leaderTerm,originalConfiguration:leaderConfiguration,actions:[
       {type:"partition",node:String(leader)},
       {type:"kill",node:String(leader)},
       {type:"kill",node:String(second)},
@@ -220,7 +239,7 @@ const observeQuorumTopology=async(scenario:string)=>{
   const safe=exact&&states.every(s=>s.authorities.length===0);
   chaos.recordInvariant("quorum-split-no-authority",safe,JSON.stringify(states));
 };
-const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario="random")=>{
+const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario="random",context?:{originalLeader?:number;originalTerm?:string;originalConfiguration?:string})=>{
   const network=uniqueNetworkNodes(actions);
   const kills=[...new Set(actions.filter(action=>action.type==="kill").map(action=>Number(action.node)))];
   const partition=network.find(action=>action.type==="partition");
@@ -253,16 +272,39 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
   if(kills.length)await Promise.all(kills.map(i=>cluster.restart(i)));
   await Bun.sleep(Math.max(1200,recoveryDwellMs));
   await observeTransition("recovered");
+  if(scenario==="leader-assassination"||scenario==="leader-double-fault"){
+    const original=context?.originalLeader;
+    const replacement=await waitForAuthoritativeLeader(original===undefined?new Set<number>():new Set([original]),Math.max(10000,networkDwellMs+recoveryDwellMs+5000));
+    const replacementState=replacement===undefined?undefined:await cluster.state(replacement) as any;
+    chaos.recordInvariant("leader-succession-replacement-exists",replacement!==undefined,"scenario="+scenario+" original="+(original??"none")+" replacement="+(replacement??"none"));
+    chaos.recordInvariant("leader-succession-original-relinquished",original===undefined||replacement!==original,"original="+(original??"none")+" replacement="+(replacement??"none"));
+    chaos.recordInvariant("leader-succession-term-advanced",context?.originalTerm===undefined||replacementState===undefined||BigInt(String(replacementState.term))>BigInt(context.originalTerm),"originalTerm="+(context?.originalTerm??"none")+" replacementTerm="+(replacementState?.term??"none"));
+    chaos.recordInvariant("leader-succession-configuration-unchanged",context?.originalConfiguration===undefined||replacementState===undefined||String(replacementState.configurationVersion??"0")===context.originalConfiguration,"originalConfiguration="+(context?.originalConfiguration??"none")+" replacementConfiguration="+(replacementState?.configurationVersion??"none"));
+  }
   if(scenario==="rapid-leader-churn"){
-    const nextLeader=await currentLeader();
+    const firstLeader=context?.originalLeader;
+    const nextLeader=await waitForAuthoritativeLeader(firstLeader===undefined?new Set<number>():new Set([firstLeader]),10000);
+    const nextState=nextLeader===undefined?undefined:await cluster.state(nextLeader) as any;
+    chaos.recordInvariant("leader-churn-second-leader-exists",nextLeader!==undefined,"first="+(firstLeader??"none")+" second="+(nextLeader??"none"));
+    chaos.recordInvariant("leader-churn-second-leader-different",firstLeader===undefined||nextLeader===undefined||nextLeader!==firstLeader,"first="+(firstLeader??"none")+" second="+(nextLeader??"none"));
+    chaos.recordInvariant("leader-churn-second-term-advanced",context?.originalTerm===undefined||nextState===undefined||BigInt(String(nextState.term))>BigInt(context.originalTerm),"firstTerm="+(context?.originalTerm??"none")+" secondTerm="+(nextState?.term??"none"));
+    chaos.recordInvariant("leader-churn-configuration-unchanged",context?.originalConfiguration===undefined||nextState===undefined||String(nextState.configurationVersion??"0")===context.originalConfiguration,"configuration="+(nextState?.configurationVersion??"none"));
     if(nextLeader!==undefined){
       await readTransitionEvidence(scenario,"second-leader-before-kill");
       await cluster.hardKill(nextLeader);
       await observeTransition("second-leader-killed");
       await Bun.sleep(networkDwellMs);
+      const thirdLeader=await waitForAuthoritativeLeader(new Set([nextLeader]),10000);
+      const thirdState=thirdLeader===undefined?undefined:await cluster.state(thirdLeader) as any;
+      chaos.recordInvariant("leader-churn-third-leader-exists",thirdLeader!==undefined,"second="+nextLeader+" third="+(thirdLeader??"none"));
+      chaos.recordInvariant("leader-churn-third-leader-different",thirdLeader===undefined||thirdLeader!==nextLeader,"second="+nextLeader+" third="+(thirdLeader??"none"));
+      chaos.recordInvariant("leader-churn-third-term-advanced",nextState===undefined||thirdState===undefined||BigInt(String(thirdState.term))>BigInt(String(nextState.term)),"secondTerm="+(nextState?.term??"none")+" thirdTerm="+(thirdState?.term??"none"));
       await cluster.restart(nextLeader);
       await Bun.sleep(Math.max(1200,recoveryDwellMs));
-      await observeTransition("second-leader-recovered");
+      const settledLeader=await waitForAuthoritativeLeader(new Set(),10000);
+      const settledState=settledLeader===undefined?undefined:await cluster.state(settledLeader) as any;
+      chaos.recordInvariant("leader-churn-final-authority-exists",settledLeader!==undefined,"leader="+(settledLeader??"none"));
+      chaos.recordInvariant("leader-churn-final-configuration-unchanged",context?.originalConfiguration===undefined||settledState===undefined||String(settledState.configurationVersion??"0")===context.originalConfiguration,"originalConfiguration="+(context?.originalConfiguration??"none")+" finalConfiguration="+(settledState?.configurationVersion??"none"));
     }
   }
   return kills.length+network.length>0;
@@ -279,7 +321,7 @@ try{
 
     try{
       await readTransitionEvidence(selected.scenario,"pre-fault");
-      await applyFaultWindow(actions,selected.scenario);
+      await applyFaultWindow(actions,selected.scenario,selected);
       if(actions.some(action=>action.type==="heal"))await cluster.heal();
       await readTransitionEvidence(selected.scenario,"after");
     }catch(error){
@@ -387,7 +429,7 @@ try{
     reportWriteError=String(error);
     console.error("HA soak report write failed:",reportPath,reportWriteError);
   }
-  const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered","transition-authority-unique","transition-term-monotonic","transition-configuration-monotonic"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
+  const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered","transition-authority-unique","transition-term-monotonic","transition-configuration-monotonic","quorum-split-no-authority","leader-succession-replacement-exists","leader-succession-original-relinquished","leader-succession-term-advanced","leader-succession-configuration-unchanged","leader-churn-second-leader-exists","leader-churn-second-leader-different","leader-churn-second-term-advanced","leader-churn-configuration-unchanged","leader-churn-third-leader-exists","leader-churn-third-leader-different","leader-churn-third-term-advanced","leader-churn-final-authority-exists","leader-churn-final-configuration-unchanged"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
   const terminal={...result,invariantSummary,unexpectedFailureCount:campaign.unexpectedFailures.length,reportDir,reportPath,reportWriteError};
   console.log(JSON.stringify(compact?terminal:{...terminal,actionCounts:campaign.actionCounts,failures:campaign.failures},null,2));
 }finally{
