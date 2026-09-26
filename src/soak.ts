@@ -70,7 +70,7 @@ const readTransitionEvidence=async(scenario:string,label:string)=>{
   const nodes=await Promise.all(cluster.nodes.map(async(_,i)=>{
     try{
       const state=await cluster.state(i) as any;
-      return{index:i,role:state.role,term:String(state.term),quorum:!!state.quorum,fenced:!!state.fenced,leaderId:state.leaderId||undefined,configurationVersion:String(state.configurationVersion??"0")};
+      return{index:i,nodeId:state.nodeId,role:state.role,term:String(state.term),quorum:!!state.quorum,fenced:!!state.fenced,leaderId:state.leaderId||undefined,configurationVersion:String(state.configurationVersion??"0")};
     }catch{return undefined}
   }));
   transitionEvidence.push({at:Date.now(),scenario,label,nodes:nodes.filter((node):node is NonNullable<typeof node>=>node!==undefined)});
@@ -433,7 +433,7 @@ try{
     reportWriteError=String(error);
     console.error("HA soak report write failed:",reportPath,reportWriteError);
   }
-  const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered","transition-authority-unique","transition-term-monotonic","transition-configuration-monotonic","quorum-split-no-authority","leader-succession-replacement-exists","leader-succession-original-relinquished","leader-succession-term-advanced","leader-succession-configuration-unchanged","leader-churn-second-leader-exists","leader-churn-second-leader-different","leader-churn-second-term-advanced","leader-churn-configuration-unchanged","leader-churn-third-leader-exists","leader-churn-third-leader-different","leader-churn-third-term-advanced","leader-churn-final-authority-exists","leader-churn-final-configuration-unchanged"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
+  const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered","leader-self-identity","same-term-authority-unique","transition-authority-unique","transition-term-monotonic","transition-configuration-monotonic","quorum-split-no-authority","leader-succession-replacement-exists","leader-succession-original-relinquished","leader-succession-term-advanced","leader-succession-configuration-unchanged","leader-churn-second-leader-exists","leader-churn-second-leader-different","leader-churn-second-term-advanced","leader-churn-configuration-unchanged","leader-churn-third-leader-exists","leader-churn-third-leader-different","leader-churn-third-term-advanced","leader-churn-final-authority-exists","leader-churn-final-configuration-unchanged"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
   const terminal={...result,invariantSummary,unexpectedFailureCount:campaign.unexpectedFailures.length,reportDir,reportPath,reportWriteError};
   console.log(JSON.stringify(compact?terminal:{...terminal,actionCounts:campaign.actionCounts,failures:campaign.failures},null,2));
 }finally{
