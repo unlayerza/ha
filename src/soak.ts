@@ -277,34 +277,34 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
     const replacement=await waitForAuthoritativeLeader(original===undefined?new Set<number>():new Set([original]),Math.max(10000,networkDwellMs+recoveryDwellMs+5000));
     const replacementState=replacement===undefined?undefined:await cluster.state(replacement) as any;
     chaos.recordInvariant("leader-succession-replacement-exists",replacement!==undefined,"scenario="+scenario+" original="+(original??"none")+" replacement="+(replacement??"none"));
-    chaos.recordInvariant("leader-succession-original-relinquished",original===undefined||replacement!==original,"original="+(original??"none")+" replacement="+(replacement??"none"));
-    chaos.recordInvariant("leader-succession-term-advanced",context?.originalTerm===undefined||replacementState===undefined||BigInt(String(replacementState.term))>BigInt(context.originalTerm),"originalTerm="+(context?.originalTerm??"none")+" replacementTerm="+(replacementState?.term??"none"));
-    chaos.recordInvariant("leader-succession-configuration-unchanged",context?.originalConfiguration===undefined||replacementState===undefined||String(replacementState.configurationVersion??"0")===context.originalConfiguration,"originalConfiguration="+(context?.originalConfiguration??"none")+" replacementConfiguration="+(replacementState?.configurationVersion??"none"));
+    chaos.recordInvariant("leader-succession-original-relinquished",original!==undefined&&replacement!==undefined&&replacement!==original,"original="+(original??"none")+" replacement="+(replacement??"none"));
+    chaos.recordInvariant("leader-succession-term-advanced",context?.originalTerm!==undefined&&replacementState!==undefined&&BigInt(String(replacementState.term))>BigInt(context.originalTerm),"originalTerm="+(context?.originalTerm??"none")+" replacementTerm="+(replacementState?.term??"none"));
+    chaos.recordInvariant("leader-succession-configuration-unchanged",context?.originalConfiguration!==undefined&&replacementState!==undefined&&String(replacementState.configurationVersion??"0")===context.originalConfiguration,"originalConfiguration="+(context?.originalConfiguration??"none")+" replacementConfiguration="+(replacementState?.configurationVersion??"none"));
   }
   if(scenario==="rapid-leader-churn"){
     const firstLeader=context?.originalLeader;
     const nextLeader=await waitForAuthoritativeLeader(firstLeader===undefined?new Set<number>():new Set([firstLeader]),10000);
     const nextState=nextLeader===undefined?undefined:await cluster.state(nextLeader) as any;
     chaos.recordInvariant("leader-churn-second-leader-exists",nextLeader!==undefined,"first="+(firstLeader??"none")+" second="+(nextLeader??"none"));
-    chaos.recordInvariant("leader-churn-second-leader-different",firstLeader===undefined||nextLeader===undefined||nextLeader!==firstLeader,"first="+(firstLeader??"none")+" second="+(nextLeader??"none"));
-    chaos.recordInvariant("leader-churn-second-term-advanced",context?.originalTerm===undefined||nextState===undefined||BigInt(String(nextState.term))>BigInt(context.originalTerm),"firstTerm="+(context?.originalTerm??"none")+" secondTerm="+(nextState?.term??"none"));
-    chaos.recordInvariant("leader-churn-configuration-unchanged",context?.originalConfiguration===undefined||nextState===undefined||String(nextState.configurationVersion??"0")===context.originalConfiguration,"configuration="+(nextState?.configurationVersion??"none"));
+    chaos.recordInvariant("leader-churn-second-leader-different",firstLeader!==undefined&&nextLeader!==undefined&&nextLeader!==firstLeader,"first="+(firstLeader??"none")+" second="+(nextLeader??"none"));
+    chaos.recordInvariant("leader-churn-second-term-advanced",context?.originalTerm!==undefined&&nextState!==undefined&&BigInt(String(nextState.term))>BigInt(context.originalTerm),"firstTerm="+(context?.originalTerm??"none")+" secondTerm="+(nextState?.term??"none"));
+    chaos.recordInvariant("leader-churn-configuration-unchanged",context?.originalConfiguration!==undefined&&nextState!==undefined&&String(nextState.configurationVersion??"0")===context.originalConfiguration,"originalConfiguration="+(context?.originalConfiguration??"none")+" secondConfiguration="+(nextState?.configurationVersion??"none"));
     if(nextLeader!==undefined){
       await readTransitionEvidence(scenario,"second-leader-before-kill");
       await cluster.hardKill(nextLeader);
       await observeTransition("second-leader-killed");
       await Bun.sleep(networkDwellMs);
-      const thirdLeader=await waitForAuthoritativeLeader(new Set([nextLeader]),10000);
+      const thirdLeader=await waitForAuthoritativeLeader(new Set([nextLeader]),15000);
       const thirdState=thirdLeader===undefined?undefined:await cluster.state(thirdLeader) as any;
       chaos.recordInvariant("leader-churn-third-leader-exists",thirdLeader!==undefined,"second="+nextLeader+" third="+(thirdLeader??"none"));
-      chaos.recordInvariant("leader-churn-third-leader-different",thirdLeader===undefined||thirdLeader!==nextLeader,"second="+nextLeader+" third="+(thirdLeader??"none"));
-      chaos.recordInvariant("leader-churn-third-term-advanced",nextState===undefined||thirdState===undefined||BigInt(String(thirdState.term))>BigInt(String(nextState.term)),"secondTerm="+(nextState?.term??"none")+" thirdTerm="+(thirdState?.term??"none"));
+      chaos.recordInvariant("leader-churn-third-leader-different",thirdLeader!==undefined&&thirdLeader!==nextLeader,"second="+nextLeader+" third="+(thirdLeader??"none"));
+      chaos.recordInvariant("leader-churn-third-term-advanced",nextState!==undefined&&thirdState!==undefined&&BigInt(String(thirdState.term))>BigInt(String(nextState.term)),"secondTerm="+(nextState?.term??"none")+" thirdTerm="+(thirdState?.term??"none"));
       await cluster.restart(nextLeader);
       await Bun.sleep(Math.max(1200,recoveryDwellMs));
       const settledLeader=await waitForAuthoritativeLeader(new Set(),10000);
       const settledState=settledLeader===undefined?undefined:await cluster.state(settledLeader) as any;
       chaos.recordInvariant("leader-churn-final-authority-exists",settledLeader!==undefined,"leader="+(settledLeader??"none"));
-      chaos.recordInvariant("leader-churn-final-configuration-unchanged",context?.originalConfiguration===undefined||settledState===undefined||String(settledState.configurationVersion??"0")===context.originalConfiguration,"originalConfiguration="+(context?.originalConfiguration??"none")+" finalConfiguration="+(settledState?.configurationVersion??"none"));
+      chaos.recordInvariant("leader-churn-final-configuration-unchanged",context?.originalConfiguration!==undefined&&settledState!==undefined&&String(settledState.configurationVersion??"0")===context.originalConfiguration,"originalConfiguration="+(context?.originalConfiguration??"none")+" finalConfiguration="+(settledState?.configurationVersion??"none"));
     }
   }
   return kills.length+network.length>0;
