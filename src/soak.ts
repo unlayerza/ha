@@ -347,7 +347,9 @@ try{
     unexpectedFailures:campaign.unexpectedFailures,
     nodeHealth:(await Promise.all(cluster.nodes.map((_,i)=>cluster.diagnose(i)))).reduce((a,h)=>(a[h.status]++,a),{ready:0,starting:0,unreachable:0,dead:0} as Record<string,number>),
     failureCounts:campaign.failures.reduce((a,name)=>(a[name]=(a[name]||0)+1,a),{} as Record<string,number>),
-    expectedProcessCount:nodeCount+1,\n    scenarioCounts,\n    transitionEvidence,
+    expectedProcessCount:nodeCount+1,
+    scenarioCounts,
+    transitionEvidence,
     resources:{
       supported:resourceSamples.some(s=>s.supported),
       samples:resourceSamples.length,
