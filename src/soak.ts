@@ -133,7 +133,7 @@ const chooseScenarioWindow=async()=>{
     ].slice(0,Math.max(3,burst))};
   }
   if(scenario==="rapid-leader-churn"){
-    return{scenario,actions:[
+    return{scenario,originalLeader:leader,originalTerm:leaderTerm,originalConfiguration:leaderConfiguration,actions:[
       {type:"partition",node:String(leader)},
       {type:"kill",node:String(leader)},
       {type:"drop",node:String(chaos.random.int(cluster.nodes.length))},
