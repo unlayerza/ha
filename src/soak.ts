@@ -1,6 +1,7 @@
 import{LocalProcessCluster}from"./process-harness";
 import{ChaosController}from"./chaos";
 import{formatBytes,type ResourceSnapshot}from"./resources";
+import{mkdir}from"node:fs/promises";
 
 interface SoakProfile{
   name:string;
@@ -241,7 +242,7 @@ try{
     },
   };
     const reportDir=Bun.env.HA_SOAK_REPORT_DIR||".ha-soak";
-  await Bun.mkdir(reportDir,{recursive:true});
+  await mkdir(reportDir,{recursive:true});
   const reportPath=reportDir+"/campaign-"+seed+"-"+(campaign.finishedAt||Date.now())+".json";
   let reportWriteError:string|undefined;
   try{
