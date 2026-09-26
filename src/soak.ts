@@ -145,6 +145,7 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[])=>{
     const node=Number(partition.node),address=cluster.nodes[node].address;
     const peers=cluster.nodes.filter((_,i)=>i!==node).map(n=>n.address);
     await Promise.all(cluster.nodes.map((_,i)=>cluster.setChaos(i,i===node?{partition:peers}:{partition:[address]})));
+    await observeTransition("partition-applied");
   }
   await Promise.all(network.filter(action=>action.type!=="partition").map(action=>{
     const node=Number(action.node);
@@ -155,10 +156,13 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[])=>{
     return Promise.resolve({});
   }));
   if(kills.length)await Promise.all(kills.map(i=>cluster.hardKill(i)));
+  await observeTransition("post-kill");
   await Bun.sleep(networkDwellMs);
+  await observeTransition("fault-window");
   await cluster.heal();
   if(kills.length)await Promise.all(kills.map(i=>cluster.restart(i)));
   await Bun.sleep(Math.max(1200,recoveryDwellMs));
+  await observeTransition("recovered");
   return kills.length+network.length>0;
 };
 
