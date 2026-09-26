@@ -99,7 +99,10 @@ export class LocalProcessCluster{
     if(!r.ok)throw new Error(`HA chaos request failed for node ${index}: HTTP ${r.status}`);
     return r.json()
   }
-  async clearChaos(){await Promise.all(this.nodes.map((_,i)=>this.setChaos(i,{})))}
+  async clearChaos(){
+    const live=this.nodes.filter(n=>n.process&&n.process.exitCode===null);
+    await Promise.allSettled(live.map(n=>this.setChaos(n.index,{})));
+  }
   async isolate(index:number){
     const address=this.nodes[index].address;
     const peers=this.nodes.filter((_,j)=>j!==index).map(x=>x.address);
