@@ -113,6 +113,30 @@ const classifyActionError=(error:unknown)=>{
   return"other";
 };
 
+const transitionMaxTerms=new Map<number,bigint>();
+const transitionMaxConfigurations=new Map<number,bigint>();
+
+const observeTransition=async(label:string)=>{
+  const states=await Promise.all(cluster.nodes.map(async(_,i)=>{
+    try{return{i,state:await cluster.state(i) as any}}
+    catch{return undefined}
+  }));
+  const live=states.filter((entry):entry is {i:number;state:any}=>entry!==undefined);
+  const authoritative=live.filter(({state})=>state.role==="leader"&&!state.fenced&&state.quorum);
+  chaos.recordInvariant("transition-authority-unique",authoritative.length<=1,authoritative.map(({i,state})=>`node-${i}:term=${state.term}:leader=${state.leaderId}`).join(","));
+  for(const{i,state}of live){
+    const term=BigInt(String(state.term??"0"));
+    const configuration=BigInt(String(state.configurationVersion??"0"));
+    const previousTerm=transitionMaxTerms.get(i);
+    const previousConfiguration=transitionMaxConfigurations.get(i);
+    chaos.recordInvariant("transition-term-monotonic",previousTerm===undefined||term>=previousTerm,`node-${i} ${previousTerm??"none"}->${term} ${label}`);
+    chaos.recordInvariant("transition-configuration-monotonic",previousConfiguration===undefined||configuration>=previousConfiguration,`node-${i} ${previousConfiguration??"none"}->${configuration} ${label}`);
+    if(previousTerm===undefined||term>previousTerm)transitionMaxTerms.set(i,term);
+    if(previousConfiguration===undefined||configuration>previousConfiguration)transitionMaxConfigurations.set(i,configuration);
+  }
+  return live;
+};
+
 const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[])=>{
   const network=uniqueNetworkNodes(actions);
   const kills=[...new Set(actions.filter(action=>action.type==="kill").map(action=>Number(action.node)))];
