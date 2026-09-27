@@ -121,7 +121,7 @@ const observeLeaderChurnRecovery=async(excluded=new Set<number>(),baselineTerm=0
       authorityAcquired=true;
       break;
     }
-    await Bun.sleep(75);
+    await Bun.sleep(200);
   }
   return{thirdLeader,thirdTerm,electionStarted,preVoteStarted,authorityAcquired,timeline};
 };
@@ -335,11 +335,11 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
       await cluster.hardKill(nextLeader);
       await observeTransition("second-leader-killed");
       await Bun.sleep(networkDwellMs);
+      const secondTerm=BigInt(String(nextState?.term??"0"));
       const secondBaseline=await Promise.all(cluster.nodes.map(async(_,i)=>{try{return{i,state:await cluster.state(i) as any}}catch{return undefined}}));
       const secondRounds=new Map<number,number>(secondBaseline.filter((entry):entry is {i:number;state:any}=>entry!==undefined).map(entry=>[entry.i,Number(entry.state.electionDiagnostics?.round??0)]));
       const churnRecovery=await observeLeaderChurnRecovery(new Set([nextLeader]),secondTerm,secondRounds,15000);
       const thirdLeader=churnRecovery.thirdLeader;
-      const secondTerm=BigInt(String(nextState?.term??"0"));
       const thirdTerm=churnRecovery.thirdTerm;
       const thirdTimeline=churnRecovery.timeline;
       chaos.recordInvariant("leader-churn-third-pre-vote-started",churnRecovery.preVoteStarted,"second="+nextLeader+" samples="+thirdTimeline.length);
