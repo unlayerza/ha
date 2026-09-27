@@ -84,7 +84,7 @@ const authoritativeLeader=async()=>{
     return leaders.length===1?leaders[0]:undefined;
   }catch{return undefined}
 };
-const observeLeaderChurnRecovery=async(excluded=new Set<number>(),timeoutMs=15000)=>{
+const observeLeaderChurnRecovery=async(excluded=new Set<number>(),baselineTerm=0n,baselineRounds=new Map<number,number>(),timeoutMs=15000)=>{
   const deadline=Date.now()+timeoutMs;
   const timeline:Array<{at:number;leaders:number[];authoritative:number[];terms:Array<{index:number;term:string;role:string;leaderId:string|null;fenced:boolean;quorum:boolean;phase:string;round:number;lastEvent:string;deadlineInMs:number;lastHeartbeatAgeMs:number|null}>}>=[];
   let thirdLeader:number|undefined;
@@ -108,13 +108,11 @@ const observeLeaderChurnRecovery=async(excluded=new Set<number>(),timeoutMs=1500
     }));
     timeline.push({at:Date.now(),leaders,authoritative,terms});
     for(const entry of terms){
-      if(entry.phase==="pre-vote"||entry.lastEvent.startsWith("pre-vote"))preVoteStarted=true;
-      if(entry.phase==="election"||entry.lastEvent.startsWith("election-"))electionStarted=true;
-    }
-    const candidates=terms.filter(entry=>entry.role==="candidate");
-    const maxTerm=terms.reduce((max,entry)=>{const term=BigInt(entry.term);return term>max?term:max},0n);
-    if(thirdTerm===undefined&&maxTerm>0n){
-      // The caller supplies the second leader's term through the returned timeline.
+      const baselineRound=baselineRounds.get(entry.index)??0;
+      const newRound=entry.round>baselineRound;
+      const term=BigInt(entry.term);
+      if(newRound&&(entry.phase==="pre-vote"||entry.lastEvent.startsWith("pre-vote")))preVoteStarted=true;
+      if(newRound&&(entry.phase==="election"||entry.lastEvent.startsWith("election-"))||term>baselineTerm)electionStarted=true;
     }
     const candidateLeader=authoritative.find(index=>!excluded.has(index));
     if(candidateLeader!==undefined){
@@ -123,7 +121,6 @@ const observeLeaderChurnRecovery=async(excluded=new Set<number>(),timeoutMs=1500
       authorityAcquired=true;
       break;
     }
-    if(candidates.length>0||preVoteStarted)electionStarted=electionStarted||candidates.length>0;
     await Bun.sleep(75);
   }
   return{thirdLeader,thirdTerm,electionStarted,preVoteStarted,authorityAcquired,timeline};
@@ -338,7 +335,8 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
       await cluster.hardKill(nextLeader);
       await observeTransition("second-leader-killed");
       await Bun.sleep(networkDwellMs);
-      const churnRecovery=await observeLeaderChurnRecovery(new Set([nextLeader]),15000);
+      const secondRounds=new Map<number,number>((nextState?.electionDiagnostics?[[nextLeader,Number(nextState.electionDiagnostics.round??0)]]:[]));
+      const churnRecovery=await observeLeaderChurnRecovery(new Set([nextLeader]),BigInt(String(nextState?.term??"0")),secondRounds,15000);
       const thirdLeader=churnRecovery.thirdLeader;
       const thirdState=thirdLeader===undefined?undefined:await cluster.state(thirdLeader) as any;
       const secondTerm=BigInt(String(nextState?.term??"0"));
