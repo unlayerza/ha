@@ -348,12 +348,8 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
       chaos.recordInvariant("leader-churn-third-leader-different",thirdLeader!==undefined&&thirdLeader!==nextLeader,"second="+nextLeader+" third="+(thirdLeader??"none"));
       chaos.recordInvariant("leader-churn-third-term-advanced",thirdTerm!==undefined&&thirdTerm>secondTerm,"secondTerm="+secondTerm+" thirdTerm="+(thirdTerm??"none"));
       chaos.recordInvariant("leader-churn-third-authority-acquired",churnRecovery.authorityAcquired,"third="+(thirdLeader??"none")+" samples="+thirdTimeline.length);
-      if(thirdLeader===undefined){
-        const diagnostic=await readTransitionEvidence(scenario,"third-leader-timeout");
-        chaos.recordInvariant("leader-churn-third-leader-diagnostic",diagnostic.length>0,JSON.stringify({timeline:thirdTimeline,final:diagnostic}));
-      }else{
-        transitionEvidence.push({at:Date.now(),scenario,label:"third-leader-observed",nodes:thirdTimeline.at(-1)?.terms.map(entry=>({index:entry.index,nodeId:undefined,role:entry.role,term:entry.term,quorum:entry.quorum,fenced:entry.fenced,leaderId:entry.leaderId||undefined,configurationVersion:undefined,electionDiagnostics:{phase:entry.phase,round:entry.round,lastEvent:entry.lastEvent,deadlineInMs:entry.deadlineInMs,lastHeartbeatAgeMs:entry.lastHeartbeatAgeMs}}))??[]});
-      }
+      const diagnostic=await readTransitionEvidence(scenario,thirdLeader===undefined?"third-leader-timeout":"third-leader-observed");
+      chaos.recordInvariant("leader-churn-third-leader-diagnostic",diagnostic.length>0,JSON.stringify({timeline:thirdTimeline,final:diagnostic}));
       await cluster.restart(nextLeader);
       await Bun.sleep(Math.max(1200,recoveryDwellMs));
       const settledLeader=await waitForAuthoritativeLeader(new Set(),10000);
