@@ -289,6 +289,7 @@ const observeQuorumTopology=async(scenario:string)=>{
 const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario="random",context?:{originalLeader?:number;originalTerm?:string;originalConfiguration?:string})=>{
   const network=uniqueNetworkNodes(actions);
   const kills=[...new Set(actions.filter(action=>action.type==="kill").map(action=>Number(action.node)))];
+  const pendingRestarts=new Set(kills);
   const partition=network.find(action=>action.type==="partition");
   try{
   if(scenario==="minority-isolation"||scenario==="quorum-split"){
