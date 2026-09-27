@@ -18,7 +18,7 @@ export interface ChaosCampaign{
   failures:string[];
   actionCounts:Record<string,number>;
   invariantStats:{checks:number;passed:number;failed:number};
-  unexpectedFailures:Array<{at:number;name:string;error?:string}>;
+  unexpectedFailures:Array<{at:number;name:string;error?:string}>;diagnosticMisses:Array<{at:number;name:string;error?:string}>;
 }
 
 export class ChaosController{
@@ -26,7 +26,7 @@ export class ChaosController{
   readonly campaign:ChaosCampaign;
   constructor(seed=Date.now()){
     this.random=new SeededRandom(seed);
-    this.campaign={seed,actions:[],startedAt:Date.now(),invariants:[],failures:[],actionCounts:{},invariantStats:{checks:0,passed:0,failed:0},unexpectedFailures:[]}
+    this.campaign={seed,actions:[],startedAt:Date.now(),invariants:[],failures:[],actionCounts:{},invariantStats:{checks:0,passed:0,failed:0},unexpectedFailures:[],diagnosticMisses:[]}
   }
   choose(actions:ChaosAction[]){
     const action=actions[this.random.int(actions.length)];
@@ -44,7 +44,7 @@ export class ChaosController{
       this.campaign.unexpectedFailures.push({at:Date.now(),name,error});
     }
   }
-  finish(){this.campaign.finishedAt=Date.now();return structuredClone(this.campaign)}
+  recordDiagnostic(name:string,ok:boolean,error?:string){if(!ok)this.campaign.diagnosticMisses.push({at:Date.now(),name,error})}\n  finish(){this.campaign.finishedAt=Date.now();return structuredClone(this.campaign)}
 }
 
 export function deterministicPolicy(seed:number):ChaosPolicy{
