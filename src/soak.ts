@@ -335,10 +335,10 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
       await cluster.hardKill(nextLeader);
       await observeTransition("second-leader-killed");
       await Bun.sleep(networkDwellMs);
-      const secondRounds=new Map<number,number>((nextState?.electionDiagnostics?[[nextLeader,Number(nextState.electionDiagnostics.round??0)]]:[]));
-      const churnRecovery=await observeLeaderChurnRecovery(new Set([nextLeader]),BigInt(String(nextState?.term??"0")),secondRounds,15000);
+      const secondBaseline=await Promise.all(cluster.nodes.map(async(_,i)=>{try{return{i,state:await cluster.state(i) as any}}catch{return undefined}}));
+      const secondRounds=new Map<number,number>(secondBaseline.filter((entry):entry is {i:number;state:any}=>entry!==undefined).map(entry=>[entry.i,Number(entry.state.electionDiagnostics?.round??0)]));
+      const churnRecovery=await observeLeaderChurnRecovery(new Set([nextLeader]),secondTerm,secondRounds,15000);
       const thirdLeader=churnRecovery.thirdLeader;
-      const thirdState=thirdLeader===undefined?undefined:await cluster.state(thirdLeader) as any;
       const secondTerm=BigInt(String(nextState?.term??"0"));
       const thirdTerm=churnRecovery.thirdTerm;
       const thirdTimeline=churnRecovery.timeline;
