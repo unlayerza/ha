@@ -20,15 +20,15 @@ export class Election{
   constructor(private nodeId:string,private transport:Transport,private clock:Clock,private heartbeatMs:number,private minElectionMs:number,private maxElectionMs:number,private hooks:ElectionHooks,o:ElectionOptions={}){this.random=o.random||Math.random}
   setNodeId(id:string){this.nodeId=id}
   setElectionAllowed(allowed:boolean){this.electionAllowed=allowed;if(allowed)this.resetDeadline()}
-  async stepDown(){if(this.role==="follower")return;this.role="follower";this.leaderId=null;this.votes.clear();this.preVotes.clear();this.resetDeadline();await this.hooks.onRole(this.role,this.term)}
+  async stepDown(){if(this.role==="follower")return;this.phase="follower";this.lastEvent="step-down";this.role="follower";this.leaderId=null;this.votes.clear();this.preVotes.clear();this.resetDeadline();await this.hooks.onRole(this.role,this.term)}
   isElectionAllowed(){return this.electionAllowed}
   private timeout(){const span=this.maxElectionMs-this.minElectionMs;return this.minElectionMs+(span?Math.floor(this.random()*span):0)}
   private resetDeadline(){this.deadline=this.clock.now()+this.timeout()}
   private voters(){return this.hooks.voters()}
   private majority(){const n=this.voters().length;return Math.floor(n/2)+1}
   private isVoter(nodeId:string){return this.voters().includes(nodeId)}
-  async restore(term:bigint,votedFor:string|null){this.term=term;this.votedFor=votedFor;this.resetDeadline()}
-  async observeTerm(term:bigint){if(term<=this.term)return false;this.term=term;this.role="follower";this.votedFor=null;this.leaderId=null;this.votes.clear();this.preVotes.clear();await this.hooks.persist(this.term,null);await this.hooks.onTerm(this.term);await this.hooks.onRole(this.role,this.term);this.resetDeadline();return true}
+  async restore(term:bigint,votedFor:string|null){this.term=term;this.votedFor=votedFor;this.phase="follower";this.lastEvent="restored";this.resetDeadline()}
+  async observeTerm(term:bigint){if(term<=this.term)return false;this.term=term;this.phase="follower";this.lastEvent="term-observed";this.role="follower";this.votedFor=null;this.leaderId=null;this.votes.clear();this.preVotes.clear();await this.hooks.persist(this.term,null);await this.hooks.onTerm(this.term);await this.hooks.onRole(this.role,this.term);this.resetDeadline();return true}
   diagnostics(){return{phase:this.phase,round:this.electionRound,lastEvent:this.lastEvent,deadlineInMs:Math.max(0,this.deadline-this.clock.now()),lastHeartbeatAgeMs:this.lastHeartbeat?Math.max(0,this.clock.now()-this.lastHeartbeat):null,preVotes:this.preVotes.size,votes:this.votes.size,majority:this.majority(),electionAllowed:this.electionAllowed,voter:this.isVoter(this.nodeId)}}
   async start(){this.lastEvent="started";this.phase=this.role;this.resetDeadline();this.timer=setInterval(()=>void this.tick().catch(()=>{}),Math.max(20,Math.floor(this.heartbeatMs/2)));if(this.electionAllowed&&this.isVoter(this.nodeId)&&this.voters().length===1)await this.startElection()}
   async stop(){if(this.timer)clearInterval(this.timer)}
@@ -44,7 +44,7 @@ export class Election{
     if(m.kind==="pre_vote_request")return this.onPreVoteRequest(m);
     if(m.kind==="pre_vote_response")return this.onPreVoteResponse(m);
     if(m.term<this.term)throw new StaleTermError();
-    if(m.term>this.term){this.term=m.term;this.role="follower";this.votedFor=null;this.leaderId=null;this.votes.clear();this.preVotes.clear();await this.hooks.persist(this.term,null);await this.hooks.onTerm(this.term);await this.hooks.onRole(this.role,this.term);this.resetDeadline()}
+    if(m.term>this.term){this.term=m.term;this.phase="follower";this.lastEvent="term-observed";this.role="follower";this.votedFor=null;this.leaderId=null;this.votes.clear();this.preVotes.clear();await this.hooks.persist(this.term,null);await this.hooks.onTerm(this.term);await this.hooks.onRole(this.role,this.term);this.resetDeadline()}
     if(m.kind==="heartbeat")return this.onHeartbeat(m);
     if(m.kind==="vote_request")return this.onVoteRequest(m);
     if(m.kind==="vote_response")return this.onVoteResponse(m)
