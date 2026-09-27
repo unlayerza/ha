@@ -86,7 +86,7 @@ const authoritativeLeader=async()=>{
 };
 const observeLeaderChurnRecovery=async(excluded=new Set<number>(),baselineTerm=0n,baselineRounds=new Map<number,number>(),timeoutMs=15000)=>{
   const deadline=Date.now()+timeoutMs;
-  const timeline:Array<{at:number;leaders:number[];authoritative:number[];terms:Array<{index:number;term:string;role:string;leaderId:string|null;fenced:boolean;quorum:boolean;phase:string;round:number;lastEvent:string;deadlineInMs:number;lastHeartbeatAgeMs:number|null}>}>=[];
+  const timeline:Array<{at:number;leaders:number[];authoritative:number[];terms:Array<{index:number;term:string;role:string;leaderId:string|null;fenced:boolean;quorum:boolean;phase:string;round:number;lastEvent:string;transitionSequence:number;preVoteCount:number;electionCount:number;leaderCount:number;deadlineInMs:number;lastHeartbeatAgeMs:number|null}>}>=[];
   let thirdLeader:number|undefined;
   let thirdTerm:bigint|undefined;
   let electionStarted=false;
@@ -103,16 +103,22 @@ const observeLeaderChurnRecovery=async(excluded=new Set<number>(),baselineTerm=0
       phase:String(state.electionDiagnostics?.phase??"unknown"),
       round:Number(state.electionDiagnostics?.round??0),
       lastEvent:String(state.electionDiagnostics?.lastEvent??"unknown"),
+      transitionSequence:Number(state.electionDiagnostics?.transitionSequence??0),
+      preVoteCount:Number(state.electionDiagnostics?.preVoteCount??0),
+      electionCount:Number(state.electionDiagnostics?.electionCount??0),
+      leaderCount:Number(state.electionDiagnostics?.leaderCount??0),
       deadlineInMs:Number(state.electionDiagnostics?.deadlineInMs??0),
       lastHeartbeatAgeMs:state.electionDiagnostics?.lastHeartbeatAgeMs==null?null:Number(state.electionDiagnostics.lastHeartbeatAgeMs)
     }));
     timeline.push({at:Date.now(),leaders,authoritative,terms});
     for(const entry of terms){
       const baselineRound=baselineRounds.get(entry.index)??0;
+      const baselinePreVote=baselineRounds.get(entry.index+1000000)??0;
+      const baselineElection=baselineRounds.get(entry.index+2000000)??0;
       const newRound=entry.round>baselineRound;
       const term=BigInt(entry.term);
-      if(newRound&&(entry.phase==="pre-vote"||entry.lastEvent.startsWith("pre-vote")))preVoteStarted=true;
-      if(newRound&&(entry.phase==="election"||entry.lastEvent.startsWith("election-"))||term>baselineTerm)electionStarted=true;
+      if(entry.preVoteCount>baselinePreVote)preVoteStarted=true;
+      if(entry.electionCount>baselineElection||term>baselineTerm||newRound&&(entry.phase==="election"||entry.lastEvent.startsWith("election-")))electionStarted=true;
     }
     const candidateLeader=authoritative.find(index=>!excluded.has(index));
     if(candidateLeader!==undefined){
@@ -284,6 +290,7 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
   const network=uniqueNetworkNodes(actions);
   const kills=[...new Set(actions.filter(action=>action.type==="kill").map(action=>Number(action.node)))];
   const partition=network.find(action=>action.type==="partition");
+  try{
   if(scenario==="minority-isolation"||scenario==="quorum-split"){
     const split=Math.floor(cluster.nodes.length/2)+(scenario==="quorum-split"?0:-1);
     const minority=cluster.nodes.slice(0,Math.max(1,split)).map(n=>n.index);
@@ -337,19 +344,19 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
       await Bun.sleep(networkDwellMs);
       const secondTerm=BigInt(String(nextState?.term??"0"));
       const secondBaseline=await Promise.all(cluster.nodes.map(async(_,i)=>{try{return{i,state:await cluster.state(i) as any}}catch{return undefined}}));
-      const secondRounds=new Map<number,number>(secondBaseline.filter((entry):entry is {i:number;state:any}=>entry!==undefined).map(entry=>[entry.i,Number(entry.state.electionDiagnostics?.round??0)]));
+      const secondRounds=new Map<number,number>();for(const entry of secondBaseline){if(entry!==undefined){secondRounds.set(entry.i,Number(entry.state.electionDiagnostics?.round??0));secondRounds.set(entry.i+1000000,Number(entry.state.electionDiagnostics?.preVoteCount??0));secondRounds.set(entry.i+2000000,Number(entry.state.electionDiagnostics?.electionCount??0))}}
       const churnRecovery=await observeLeaderChurnRecovery(new Set([nextLeader]),secondTerm,secondRounds,15000);
       const thirdLeader=churnRecovery.thirdLeader;
       const thirdTerm=churnRecovery.thirdTerm;
       const thirdTimeline=churnRecovery.timeline;
-      chaos.recordInvariant("leader-churn-third-pre-vote-started",churnRecovery.preVoteStarted,"second="+nextLeader+" samples="+thirdTimeline.length);
+      chaos.recordDiagnostic("leader-churn-third-pre-vote-started",churnRecovery.preVoteStarted,"second="+nextLeader+" samples="+thirdTimeline.length);
       chaos.recordInvariant("leader-churn-third-election-started",churnRecovery.electionStarted,"secondTerm="+secondTerm+" samples="+thirdTimeline.length);
       chaos.recordInvariant("leader-churn-third-leader-exists",thirdLeader!==undefined,"second="+nextLeader+" third="+(thirdLeader??"none")+" samples="+thirdTimeline.length);
       chaos.recordInvariant("leader-churn-third-leader-different",thirdLeader!==undefined&&thirdLeader!==nextLeader,"second="+nextLeader+" third="+(thirdLeader??"none"));
       chaos.recordInvariant("leader-churn-third-term-advanced",thirdTerm!==undefined&&thirdTerm>secondTerm,"secondTerm="+secondTerm+" thirdTerm="+(thirdTerm??"none"));
       chaos.recordInvariant("leader-churn-third-authority-acquired",churnRecovery.authorityAcquired,"third="+(thirdLeader??"none")+" samples="+thirdTimeline.length);
       const diagnostic=await readTransitionEvidence(scenario,thirdLeader===undefined?"third-leader-timeout":"third-leader-observed");
-      chaos.recordInvariant("leader-churn-third-leader-diagnostic",diagnostic.length>0,JSON.stringify({timeline:thirdTimeline,final:diagnostic}));
+      chaos.recordDiagnostic("leader-churn-third-leader-diagnostic",diagnostic.length>0,JSON.stringify({timeline:thirdTimeline,final:diagnostic}));
       await cluster.restart(nextLeader);
       await Bun.sleep(Math.max(1200,recoveryDwellMs));
       const settledLeader=await waitForAuthoritativeLeader(new Set(),10000);
@@ -359,6 +366,10 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
     }
   }
   return kills.length+network.length>0;
+  }finally{
+    await cluster.heal().catch(()=>{});
+    for(const index of pendingRestarts){await cluster.restart(index).catch(()=>{})}
+  }
 };
 
 try{
@@ -458,6 +469,7 @@ try{
     expectedProcessCount:nodeCount+1,
     scenarioCounts,
     transitionEvidence,
+    diagnosticMisses:campaign.diagnosticMisses,
     resources:{
       supported:resourceSamples.some(s=>s.supported),
       samples:resourceSamples.length,
@@ -481,7 +493,7 @@ try{
     console.error("HA soak report write failed:",reportPath,reportWriteError);
   }
   const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered","leader-self-identity","same-term-authority-unique","transition-authority-unique","transition-term-monotonic","transition-configuration-monotonic","quorum-split-no-authority","leader-succession-replacement-exists","leader-succession-original-relinquished","leader-succession-term-advanced","leader-succession-configuration-unchanged","leader-churn-second-leader-exists","leader-churn-second-leader-different","leader-churn-second-term-advanced","leader-churn-configuration-unchanged","leader-churn-third-pre-vote-started","leader-churn-third-election-started","leader-churn-third-leader-exists","leader-churn-third-leader-different","leader-churn-third-term-advanced","leader-churn-third-authority-acquired","leader-churn-final-authority-exists","leader-churn-final-configuration-unchanged"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
-  const terminal={...result,invariantSummary,unexpectedFailureCount:campaign.unexpectedFailures.length,reportDir,reportPath,reportWriteError};
+  const terminal={...result,invariantSummary,unexpectedFailureCount:campaign.unexpectedFailures.length,diagnosticMissCount:campaign.diagnosticMisses.length,reportDir,reportPath,reportWriteError};
   console.log(JSON.stringify(compact?terminal:{...terminal,actionCounts:campaign.actionCounts,failures:campaign.failures},null,2));
 }finally{
   if(resourceTimer)clearInterval(resourceTimer);
