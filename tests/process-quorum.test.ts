@@ -42,7 +42,8 @@ describe("process quorum recovery",()=>{
       const recovered=await settle(s=>s.every(x=>x.quorum===true&&x.membershipReady)&&new Set(s.map(x=>x.term.toString())).size===1&&s.filter(x=>x.role==="leader").length===1,10000);
       expect(recovered.every(s=>s.quorum===true)).toBe(true);
       expect(new Set(recovered.map(s=>s.term.toString())).size).toBe(1);
-      expect(recovered.filter(s=>s.role==="leader")).toHaveLength(1);\n      expect(recovered.filter(s=>s.role==="leader"&&s.fenced===false&&s.quorum===true)).toHaveLength(1);
+      expect(recovered.filter(s=>s.role==="leader")).toHaveLength(1);
+      expect(recovered.filter(s=>s.role==="leader"&&s.fenced===false&&s.quorum===true)).toHaveLength(1);
       expect(recovered.every(s=>s.membershipReady)).toBe(true);
     }finally{await cluster.cleanup()}
   },60000);
