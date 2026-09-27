@@ -139,7 +139,7 @@ Requirements:
 
 The exact consensus protocol is an implementation decision and must be validated with failure-injection tests before production use.
 
-**Current implementation note:** leader election and quorum primitives exist and pass the current multi-process chaos campaign, but membership authority is still gossip/merge based. A committed membership/configuration layer is required before quorum/election/fencing can be treated as having the full production correctness contract.
+**Current implementation note:** leader election, quorum and authority now use the persisted committed configuration as the voter-set source of truth. Membership remains a discovery/health mechanism; it does not grant voting or authoritative status. Initial cluster bootstrap is explicit (HA_BOOTSTRAP=true), creates a one-voter configuration, and subsequent joins expand that configuration through the normal proposal/acknowledgement/quorum/commit path.
 
 ## 9. Quorum
 
@@ -373,30 +373,64 @@ Metrics:
 
 ## 21. Current Verified State
 
-As of 2026-09-24:
+As of 2026-09-27:
 
-- 21-node multi-process chaos campaign completed successfully.
-- 22 processes were observed by the resource instrumentation.
-- 84/84 invariant checks passed.
-- No unexpected failures occurred.
-- Membership convergence passed throughout the campaign.
-- No split-brain was observed.
-- Terms remained converged.
-- The campaign included kills, partitions, drops, duplicates, reordering, delay and healing.
+- Committed cluster configuration is persisted and is the source of truth for voters and election eligibility.
+- Initial bootstrap is explicit: the first node must set HA_BOOTSTRAP=true; non-bootstrap nodes must provide HA_SEEDS.
+- The audited one-voter bootstrap path is now the primary production path. The previous implicit no-seeds-means-bootstrap behavior has been removed.
+- Configuration proposals require an authorized proposer, preserve quorum intersection, require current-voter acknowledgement quorum, and persist committed versions.
+- Nodes reject stale, skipped, conflicting or unauthorized configuration changes.
+- Leader authority is separately fenced and lease-bound; transient authority loss can be recovered without retaining stale authority.
+- Cluster traffic is authenticated with HMAC-SHA256 and replay-protected.
+- The multi-process harness exercises joins, kills, restarts, partitions, delay, drop, duplicate, reorder and healing deterministically.
+- Recent deterministic campaigns maintained the core safety invariants through leader succession and churn. Resource-saturated runs on the development host produced liveness/reachability degradation without split-brain or configuration/term safety violations.
+- JSON state persistence now uses serialized writes and atomic temporary-file replacement so a process crash cannot leave a partially written target file.
 
-This validates the current cluster foundation. It does **not** yet constitute production readiness.
+This establishes HA as the production coordination foundation for the next Unlayer service integrations. It does not claim that every future operational concern—such as PKI/key rotation, regional failure, distributed storage durability or target-environment long-duration evidence—is complete.
 
-The next major correctness milestone is **committed membership/configuration**: configuration proposals, quorum acknowledgement, committed configuration versions, stable voter sets, persistence/recovery of committed configuration, and adversarial tests against obsolete configurations.
+## 22. Production Gate
 
-## 22. Current Development Order
+The remaining HA work is deliberately bounded:
 
-1. **Committed membership/configuration** — quorum-committed configuration, stable voter set, configuration versioning, persistence/recovery and stale-configuration rejection.
-2. **Adversarial consensus testing** — joins/leaves/replacements, concurrent membership changes, partitions during configuration changes, restart during commit and obsolete-node resurrection tests.
-3. **Production hardening** — bounded shutdown, transport timeouts, resource limits, operational diagnostics, reproducible chaos transport and target-environment soak campaigns.
-4. **Service consumer validation** — prove Database, Identity and Voice consume the generic contracts without embedding HA internals.
-5. **Long-running operational evidence** — 1h, 24h and 72h campaigns on target infrastructure.
+1. **Service consumer validation** — exercise the generic HA contract from Edge first, then Database, Identity and Voice.
+2. **Operational soak** — run long campaigns on appropriately provisioned target infrastructure rather than interpreting host-saturated development runs as protocol failures.
+3. **Credential evolution** — introduce stronger node credentials/PKI and rotation when the platform needs them.
+4. **Future failure domains** — regional loss, storage outages and multi-site recovery are later platform milestones.
 
-## 23. Definition of Done
+These are service/platform evolution items rather than reasons to keep the current HA implementation in an experimental bootstrap state.
+
+## 23. Bootstrap Contract
+
+### First node
+
+Set:
+
+    HA_BOOTSTRAP=true
+    HA_SECRET=<cluster secret>
+    HA_ADDRESS=<listen address>
+
+The first node starts as the sole committed voter. It can elect itself, issue authority, and admit subsequent nodes through configuration changes.
+
+### Joining node
+
+Set:
+
+    HA_BOOTSTRAP=false
+    HA_SEEDS=<address of an existing cluster node>
+    HA_SECRET=<cluster secret>
+    HA_ADDRESS=<listen address>
+
+The joining node cannot self-bootstrap merely because no seed was supplied. It must obtain a committed configuration from an existing cluster authority.
+
+### Configuration source of truth
+
+membership answers: which nodes are visible and healthy?
+
+committed configuration answers: which nodes are voters?
+
+Only committed voters can participate in election/quorum and configuration authority.
+
+## 24. Definition of Done
 
 HA is ready for service consumption when:
 
@@ -410,6 +444,9 @@ HA is ready for service consumption when:
 - membership/configuration changes are quorum committed;
 - elections use a stable committed voter set;
 - committed configuration survives restart and rejects obsolete configurations;
+- initial bootstrap is explicit and follows the same committed-configuration model used for subsequent membership changes;
+- state persistence uses atomic replacement and serialized writes;
 - a fake non-database service can consume HA;
+- Edge can consume HA without embedding election internals;
 - Database can consume it without embedding HA internals;
 - Identity and Voice can consume the same core contracts.
