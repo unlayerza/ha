@@ -44,7 +44,8 @@ export class ChaosController{
       this.campaign.unexpectedFailures.push({at:Date.now(),name,error});
     }
   }
-  recordDiagnostic(name:string,ok:boolean,error?:string){if(!ok)this.campaign.diagnosticMisses.push({at:Date.now(),name,error})}\n  finish(){this.campaign.finishedAt=Date.now();return structuredClone(this.campaign)}
+  recordDiagnostic(name:string,ok:boolean,error?:string){if(!ok)this.campaign.diagnosticMisses.push({at:Date.now(),name,error})}
+  finish(){this.campaign.finishedAt=Date.now();return structuredClone(this.campaign)}
 }
 
 export function deterministicPolicy(seed:number):ChaosPolicy{
