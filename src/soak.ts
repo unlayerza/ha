@@ -70,7 +70,7 @@ const readTransitionEvidence=async(scenario:string,label:string)=>{
   const nodes=await Promise.all(cluster.nodes.map(async(_,i)=>{
     try{
       const state=await cluster.state(i) as any;
-      return{index:i,nodeId:state.nodeId,role:state.role,term:String(state.term),quorum:!!state.quorum,fenced:!!state.fenced,leaderId:state.leaderId||undefined,configurationVersion:String(state.configurationVersion??"0")};
+      return{index:i,nodeId:state.nodeId,role:state.role,term:String(state.term),quorum:!!state.quorum,fenced:!!state.fenced,leaderId:state.leaderId||undefined,configurationVersion:String(state.configurationVersion??"0"),electionDiagnostics:state.electionDiagnostics};
     }catch{return undefined}
   }));
   transitionEvidence.push({at:Date.now(),scenario,label,nodes:nodes.filter((node):node is NonNullable<typeof node>=>node!==undefined)});
@@ -303,6 +303,11 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
       chaos.recordInvariant("leader-churn-third-leader-exists",thirdLeader!==undefined,"second="+nextLeader+" third="+(thirdLeader??"none"));
       chaos.recordInvariant("leader-churn-third-leader-different",thirdLeader!==undefined&&thirdLeader!==nextLeader,"second="+nextLeader+" third="+(thirdLeader??"none"));
       chaos.recordInvariant("leader-churn-third-term-advanced",nextState!==undefined&&thirdState!==undefined&&BigInt(String(thirdState.term))>BigInt(String(nextState.term)),"secondTerm="+(nextState?.term??"none")+" thirdTerm="+(thirdState?.term??"none"));
+      if(thirdLeader===undefined){
+        const states=await Promise.all(cluster.nodes.map(async(_,i)=>{try{return{i,state:await cluster.state(i) as any}}catch{return undefined}}));
+        const electionDiagnostics=states.filter((x):x is {i:number;state:any}=>x!==undefined).map(({i,state})=>({index:i,nodeId:state.nodeId,role:state.role,term:String(state.term),leaderId:state.leaderId,electionDiagnostics:state.electionDiagnostics}));
+        chaos.recordInvariant("leader-churn-third-election-diagnostic",electionDiagnostics.length>0,JSON.stringify(electionDiagnostics));
+      }
       await cluster.restart(nextLeader);
       await Bun.sleep(Math.max(1200,recoveryDwellMs));
       const settledLeader=await waitForAuthoritativeLeader(new Set(),10000);
