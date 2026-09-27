@@ -318,7 +318,7 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
   await Bun.sleep(networkDwellMs);
   await observeTransition("fault-window");
   await cluster.heal();
-  if(kills.length)await Promise.all(kills.map(i=>cluster.restart(i)));
+  if(kills.length){await Promise.all(kills.map(i=>cluster.restart(i)));for(const i of kills)pendingRestarts.delete(i)}
   await Bun.sleep(Math.max(1200,recoveryDwellMs));
   await observeTransition("recovered");
   if(scenario==="leader-assassination"||scenario==="leader-double-fault"){
@@ -340,7 +340,7 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
     chaos.recordInvariant("leader-churn-configuration-unchanged",context?.originalConfiguration!==undefined&&nextState!==undefined&&String(nextState.configurationVersion??"0")===context.originalConfiguration,"originalConfiguration="+(context?.originalConfiguration??"none")+" secondConfiguration="+(nextState?.configurationVersion??"none"));
     if(nextLeader!==undefined){
       await readTransitionEvidence(scenario,"second-leader-before-kill");
-      await cluster.hardKill(nextLeader);
+      await cluster.hardKill(nextLeader);pendingRestarts.add(nextLeader);
       await observeTransition("second-leader-killed");
       await Bun.sleep(networkDwellMs);
       const secondTerm=BigInt(String(nextState?.term??"0"));
@@ -358,7 +358,7 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
       chaos.recordInvariant("leader-churn-third-authority-acquired",churnRecovery.authorityAcquired,"third="+(thirdLeader??"none")+" samples="+thirdTimeline.length);
       const diagnostic=await readTransitionEvidence(scenario,thirdLeader===undefined?"third-leader-timeout":"third-leader-observed");
       chaos.recordDiagnostic("leader-churn-third-leader-diagnostic",diagnostic.length>0,JSON.stringify({timeline:thirdTimeline,final:diagnostic}));
-      await cluster.restart(nextLeader);
+      await cluster.restart(nextLeader);pendingRestarts.delete(nextLeader);
       await Bun.sleep(Math.max(1200,recoveryDwellMs));
       const settledLeader=await waitForAuthoritativeLeader(new Set(),10000);
       const settledState=settledLeader===undefined?undefined:await cluster.state(settledLeader) as any;
