@@ -84,6 +84,50 @@ const authoritativeLeader=async()=>{
     return leaders.length===1?leaders[0]:undefined;
   }catch{return undefined}
 };
+const observeLeaderChurnRecovery=async(excluded=new Set<number>(),timeoutMs=15000)=>{
+  const deadline=Date.now()+timeoutMs;
+  const timeline:Array<{at:number;leaders:number[];authoritative:number[];terms:Array<{index:number;term:string;role:string;leaderId:string|null;fenced:boolean;quorum:boolean;phase:string;round:number;lastEvent:string;deadlineInMs:number;lastHeartbeatAgeMs:number|null}>}>=[];
+  let thirdLeader:number|undefined;
+  let thirdTerm:bigint|undefined;
+  let electionStarted=false;
+  let preVoteStarted=false;
+  let authorityAcquired=false;
+  while(Date.now()<deadline){
+    const states=await Promise.all(cluster.nodes.map(async(_,i)=>{try{return{i,state:await cluster.state(i) as any}}catch{return undefined}}));
+    const live=states.filter((x):x is {i:number;state:any}=>x!==undefined);
+    const leaders=live.filter(x=>x.state.role==="leader").map(x=>x.i);
+    const authoritative=live.filter(x=>x.state.role==="leader"&&!x.state.fenced&&x.state.quorum).map(x=>x.i);
+    const terms=live.map(({i,state})=>({
+      index:i,term:String(state.term),role:String(state.role),leaderId:state.leaderId??null,
+      fenced:!!state.fenced,quorum:!!state.quorum,
+      phase:String(state.electionDiagnostics?.phase??"unknown"),
+      round:Number(state.electionDiagnostics?.round??0),
+      lastEvent:String(state.electionDiagnostics?.lastEvent??"unknown"),
+      deadlineInMs:Number(state.electionDiagnostics?.deadlineInMs??0),
+      lastHeartbeatAgeMs:state.electionDiagnostics?.lastHeartbeatAgeMs==null?null:Number(state.electionDiagnostics.lastHeartbeatAgeMs)
+    }));
+    timeline.push({at:Date.now(),leaders,authoritative,terms});
+    for(const entry of terms){
+      if(entry.phase==="pre-vote"||entry.lastEvent.startsWith("pre-vote"))preVoteStarted=true;
+      if(entry.phase==="election"||entry.lastEvent.startsWith("election-"))electionStarted=true;
+    }
+    const candidates=terms.filter(entry=>entry.role==="candidate");
+    const maxTerm=terms.reduce((max,entry)=>{const term=BigInt(entry.term);return term>max?term:max},0n);
+    if(thirdTerm===undefined&&maxTerm>0n){
+      // The caller supplies the second leader's term through the returned timeline.
+    }
+    const candidateLeader=authoritative.find(index=>!excluded.has(index));
+    if(candidateLeader!==undefined){
+      thirdLeader=candidateLeader;
+      thirdTerm=BigInt(terms.find(entry=>entry.index===candidateLeader)?.term??"0");
+      authorityAcquired=true;
+      break;
+    }
+    if(candidates.length>0||preVoteStarted)electionStarted=electionStarted||candidates.length>0;
+    await Bun.sleep(75);
+  }
+  return{thirdLeader,thirdTerm,electionStarted,preVoteStarted,authorityAcquired,timeline};
+};
 const waitForAuthoritativeLeader=async(excluded=new Set<number>(),timeoutMs=10000)=>{
   const deadline=Date.now()+timeoutMs;
   while(Date.now()<deadline){
@@ -294,19 +338,23 @@ const applyFaultWindow=async(actions:ReturnType<typeof chooseAction>[],scenario=
       await cluster.hardKill(nextLeader);
       await observeTransition("second-leader-killed");
       await Bun.sleep(networkDwellMs);
-      const thirdLeader=await waitForAuthoritativeLeader(new Set([nextLeader]),15000);
+      const churnRecovery=await observeLeaderChurnRecovery(new Set([nextLeader]),15000);
+      const thirdLeader=churnRecovery.thirdLeader;
+      const thirdState=thirdLeader===undefined?undefined:await cluster.state(thirdLeader) as any;
+      const secondTerm=BigInt(String(nextState?.term??"0"));
+      const thirdTerm=churnRecovery.thirdTerm;
+      const thirdTimeline=churnRecovery.timeline;
+      chaos.recordInvariant("leader-churn-third-pre-vote-started",churnRecovery.preVoteStarted,"second="+nextLeader+" samples="+thirdTimeline.length);
+      chaos.recordInvariant("leader-churn-third-election-started",churnRecovery.electionStarted,"secondTerm="+secondTerm+" samples="+thirdTimeline.length);
+      chaos.recordInvariant("leader-churn-third-leader-exists",thirdLeader!==undefined,"second="+nextLeader+" third="+(thirdLeader??"none")+" samples="+thirdTimeline.length);
+      chaos.recordInvariant("leader-churn-third-leader-different",thirdLeader!==undefined&&thirdLeader!==nextLeader,"second="+nextLeader+" third="+(thirdLeader??"none"));
+      chaos.recordInvariant("leader-churn-third-term-advanced",thirdTerm!==undefined&&thirdTerm>secondTerm,"secondTerm="+secondTerm+" thirdTerm="+(thirdTerm??"none"));
+      chaos.recordInvariant("leader-churn-third-authority-acquired",churnRecovery.authorityAcquired,"third="+(thirdLeader??"none")+" samples="+thirdTimeline.length);
       if(thirdLeader===undefined){
         const diagnostic=await readTransitionEvidence(scenario,"third-leader-timeout");
-        chaos.recordInvariant("leader-churn-third-leader-diagnostic",diagnostic.length>0,JSON.stringify(diagnostic));
-      }
-      const thirdState=thirdLeader===undefined?undefined:await cluster.state(thirdLeader) as any;
-      chaos.recordInvariant("leader-churn-third-leader-exists",thirdLeader!==undefined,"second="+nextLeader+" third="+(thirdLeader??"none"));
-      chaos.recordInvariant("leader-churn-third-leader-different",thirdLeader!==undefined&&thirdLeader!==nextLeader,"second="+nextLeader+" third="+(thirdLeader??"none"));
-      chaos.recordInvariant("leader-churn-third-term-advanced",nextState!==undefined&&thirdState!==undefined&&BigInt(String(thirdState.term))>BigInt(String(nextState.term)),"secondTerm="+(nextState?.term??"none")+" thirdTerm="+(thirdState?.term??"none"));
-      if(thirdLeader===undefined){
-        const states=await Promise.all(cluster.nodes.map(async(_,i)=>{try{return{i,state:await cluster.state(i) as any}}catch{return undefined}}));
-        const electionDiagnostics=states.filter((x):x is {i:number;state:any}=>x!==undefined).map(({i,state})=>({index:i,nodeId:state.nodeId,role:state.role,term:String(state.term),leaderId:state.leaderId,electionDiagnostics:state.electionDiagnostics}));
-        chaos.recordInvariant("leader-churn-third-election-diagnostic",electionDiagnostics.length>0,JSON.stringify(electionDiagnostics));
+        chaos.recordInvariant("leader-churn-third-leader-diagnostic",diagnostic.length>0,JSON.stringify({timeline:thirdTimeline,final:diagnostic}));
+      }else{
+        transitionEvidence.push({at:Date.now(),scenario,label:"third-leader-observed",nodes:thirdTimeline.at(-1)?.terms.map(entry=>({index:entry.index,nodeId:undefined,role:entry.role,term:entry.term,quorum:entry.quorum,fenced:entry.fenced,leaderId:entry.leaderId||undefined,configurationVersion:undefined,electionDiagnostics:{phase:entry.phase,round:entry.round,lastEvent:entry.lastEvent,deadlineInMs:entry.deadlineInMs,lastHeartbeatAgeMs:entry.lastHeartbeatAgeMs}}))??[]});
       }
       await cluster.restart(nextLeader);
       await Bun.sleep(Math.max(1200,recoveryDwellMs));
@@ -438,7 +486,7 @@ try{
     reportWriteError=String(error);
     console.error("HA soak report write failed:",reportPath,reportWriteError);
   }
-  const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered","leader-self-identity","same-term-authority-unique","transition-authority-unique","transition-term-monotonic","transition-configuration-monotonic","quorum-split-no-authority","leader-succession-replacement-exists","leader-succession-original-relinquished","leader-succession-term-advanced","leader-succession-configuration-unchanged","leader-churn-second-leader-exists","leader-churn-second-leader-different","leader-churn-second-term-advanced","leader-churn-configuration-unchanged","leader-churn-third-leader-exists","leader-churn-third-leader-different","leader-churn-third-term-advanced","leader-churn-final-authority-exists","leader-churn-final-configuration-unchanged"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
+  const invariantSummary=Object.fromEntries(["all-nodes-reachable","no-split-brain","membership-converged","terms-converged","configuration-converged","final-cluster-recovered","leader-self-identity","same-term-authority-unique","transition-authority-unique","transition-term-monotonic","transition-configuration-monotonic","quorum-split-no-authority","leader-succession-replacement-exists","leader-succession-original-relinquished","leader-succession-term-advanced","leader-succession-configuration-unchanged","leader-churn-second-leader-exists","leader-churn-second-leader-different","leader-churn-second-term-advanced","leader-churn-configuration-unchanged","leader-churn-third-pre-vote-started","leader-churn-third-election-started","leader-churn-third-leader-exists","leader-churn-third-leader-different","leader-churn-third-term-advanced","leader-churn-third-authority-acquired","leader-churn-final-authority-exists","leader-churn-final-configuration-unchanged"].map(name=>[name,campaign.invariants.filter(value=>value===name+":pass").length+"/"+campaign.invariants.filter(value=>value.startsWith(name+":")).length]));
   const terminal={...result,invariantSummary,unexpectedFailureCount:campaign.unexpectedFailures.length,reportDir,reportPath,reportWriteError};
   console.log(JSON.stringify(compact?terminal:{...terminal,actionCounts:campaign.actionCounts,failures:campaign.failures},null,2));
 }finally{
